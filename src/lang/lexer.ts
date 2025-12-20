@@ -69,7 +69,23 @@ export class Lexer {
         this.addToken(TokenType.STAR);
         break;
       case "/":
-        this.addToken(TokenType.SLASH);
+        if (this.match("/")) {
+          // Line comment: consume until end of line.
+          while (this.peek() !== "\n" && !this.isAtEnd()) this.advance();
+        } else if (this.match("*")) {
+          // Block comment: consume until closing */
+          while (!this.isAtEnd()) {
+            if (this.peek() === "\n") this.line++;
+            if (this.peek() === "*" && this.peekNext() === "/") {
+              this.advance(); // *
+              this.advance(); // /
+              break;
+            }
+            this.advance();
+          }
+        } else {
+          this.addToken(TokenType.SLASH);
+        }
         break;
       case "=":
         if (this.match(">")) {

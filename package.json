@@ -5,9 +5,13 @@
   "scripts": {
     "test": "vitest",
     "deos": "ts-node --transpile-only src/cli/index.ts",
+    "dev:browser": "vite --config vite.browser.config.ts",
+    "build:browser": "vite build --config vite.browser.config.ts",
+    "preview:browser": "vite preview --config vite.browser.config.ts",
     "lint": "eslint .",
     "format": "prettier --write .",
     "type-check": "tsc --noEmit",
+    "type-check:browser": "tsc -p web/tsconfig.json --noEmit",
     "prepare": "husky"
   },
   "lint-staged": {
@@ -24,6 +28,7 @@
   "license": "ISC",
   "description": "",
   "devDependencies": {
+    "@rollup/rollup-win32-x64-msvc": "^4.54.0",
     "@types/node": "^25.0.3",
     "eslint": "^9.39.2",
     "eslint-config-prettier": "^10.1.8",

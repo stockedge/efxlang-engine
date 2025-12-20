@@ -26,51 +26,156 @@ export interface TraceEvent {
   [key: string]: string | number | boolean | null | undefined | unknown;
 }
 
-export class TBCEncoder {
-  private buffer: Buffer;
-  private offset: number = 0;
+class ByteWriter {
+  private buffer: Uint8Array;
+  private view: DataView;
+  private offset = 0;
 
-  constructor(size: number = 1024 * 1024) {
-    this.buffer = Buffer.alloc(size);
+  constructor(size: number) {
+    this.buffer = new Uint8Array(size);
+    this.view = new DataView(this.buffer.buffer);
   }
 
+  writeU8(v: number) {
+    this.ensure(1);
+    this.buffer[this.offset++] = v & 0xff;
+  }
+
+  writeU16(v: number) {
+    this.ensure(2);
+    this.view.setUint16(this.offset, v, true);
+    this.offset += 2;
+  }
+
+  writeU32(v: number) {
+    this.ensure(4);
+    this.view.setUint32(this.offset, v, true);
+    this.offset += 4;
+  }
+
+  writeF64(v: number) {
+    this.ensure(8);
+    this.view.setFloat64(this.offset, v, true);
+    this.offset += 8;
+  }
+
+  writeBytes(v: Uint8Array) {
+    this.ensure(v.length);
+    this.buffer.set(v, this.offset);
+    this.offset += v.length;
+  }
+
+  writeString(v: string) {
+    const bytes = new TextEncoder().encode(v);
+    this.writeU16(bytes.length);
+    this.writeBytes(bytes);
+  }
+
+  finish(): Uint8Array {
+    return this.buffer.subarray(0, this.offset);
+  }
+
+  private ensure(n: number) {
+    if (this.offset + n <= this.buffer.length) return;
+
+    let nextSize = this.buffer.length;
+    while (this.offset + n > nextSize) nextSize *= 2;
+
+    const next = new Uint8Array(nextSize);
+    next.set(this.buffer);
+    this.buffer = next;
+    this.view = new DataView(this.buffer.buffer);
+  }
+}
+
+class ByteReader {
+  private view: DataView;
+  private offset = 0;
+
+  constructor(private buffer: Uint8Array) {
+    this.view = new DataView(
+      buffer.buffer,
+      buffer.byteOffset,
+      buffer.byteLength,
+    );
+  }
+
+  readU8() {
+    return this.buffer[this.offset++];
+  }
+  readU16() {
+    const v = this.view.getUint16(this.offset, true);
+    this.offset += 2;
+    return v;
+  }
+  readU32() {
+    const v = this.view.getUint32(this.offset, true);
+    this.offset += 4;
+    return v;
+  }
+  readF64() {
+    const v = this.view.getFloat64(this.offset, true);
+    this.offset += 8;
+    return v;
+  }
+  readBytes(n: number) {
+    const v = this.buffer.subarray(this.offset, this.offset + n);
+    this.offset += n;
+    return v;
+  }
+  readString() {
+    const len = this.readU16();
+    const b = this.readBytes(len);
+    return new TextDecoder("utf-8").decode(b);
+  }
+}
+
+export class TBCEncoder {
+  constructor(size: number = 1024 * 1024) {
+    this.initialSize = size;
+    this.writer = new ByteWriter(size);
+  }
+
+  private initialSize: number;
+  private writer: ByteWriter;
+
   encode(tbc: TBCFile): Uint8Array {
-    this.offset = 0;
+    this.writer = new ByteWriter(this.initialSize);
 
     // Header
-    this.writeU8(0xde);
-    this.writeU8(0x05);
-    this.writeU8(0x00);
-    this.writeU8(0x01);
+    this.writer.writeU8(0xde);
+    this.writer.writeU8(0x05);
+    this.writer.writeU8(0x00);
+    this.writer.writeU8(0x01);
 
     // Constant Pool
-    this.writeU16(tbc.consts.length);
+    this.writer.writeU16(tbc.consts.length);
     for (const c of tbc.consts) {
       if (c === null) {
-        this.writeU8(ConstType.NULL);
+        this.writer.writeU8(ConstType.NULL);
       } else if (typeof c === "boolean") {
-        this.writeU8(ConstType.BOOL);
-        this.writeU8(c ? 1 : 0);
+        this.writer.writeU8(ConstType.BOOL);
+        this.writer.writeU8(c ? 1 : 0);
       } else if (typeof c === "number") {
-        this.writeU8(ConstType.NUM);
-        this.writeF64(c);
+        this.writer.writeU8(ConstType.NUM);
+        this.writer.writeF64(c);
       } else if (typeof c === "string") {
-        this.writeU8(ConstType.STR);
-        this.writeString(c);
+        this.writer.writeU8(ConstType.STR);
+        this.writer.writeString(c);
       } else {
         throw new Error("Unsupported constant type");
       }
     }
 
     // Function Table
-    this.writeU16(tbc.functions.length);
+    this.writer.writeU16(tbc.functions.length);
     for (const f of tbc.functions) {
-      this.writeU16(f.arity);
-      this.writeU16(f.locals);
-      this.writeU32(f.code.length);
-      this.writeBytes(f.code);
+      this.writer.writeU16(f.arity);
+      this.writer.writeU16(f.locals);
+      this.writer.writeU32(f.code.length);
+      this.writer.writeBytes(f.code);
 
-      this.writeU16(f.handlers.length);
+      this.writer.writeU16(f.handlers.length);
       for (const h of f.handlers) {
         // Spec 8.2 says handlers are per function
         // and they have (donePc, returnFnIdx, clauseCount)
@@ -88,103 +193,75 @@ export class TBCEncoder {
         // No, it's patched in the bytecode but we also need it in the table.
 
         // Actually, Codegen should probably store it in TBCHandler object.
-        this.writeU32(h.donePc || 0);
-        this.writeU16(h.returnFnIndex);
-        this.writeU16(h.clauses.length);
+        this.writer.writeU32(h.donePc || 0);
+        this.writer.writeU16(h.returnFnIndex);
+        this.writer.writeU16(h.clauses.length);
         for (const cl of h.clauses) {
-          this.writeU16(cl.effectNameConst);
-          this.writeU16(cl.clauseFnIndex);
+          this.writer.writeU16(cl.effectNameConst);
+          this.writer.writeU16(cl.clauseFnIndex);
         }
       }
     }
 
     // Export Table (empty for now)
-    this.writeU16(0);
+    this.writer.writeU16(0);
 
-    return new Uint8Array(this.buffer.subarray(0, this.offset));
-  }
-
-  private writeU8(v: number) {
-    this.buffer.writeUInt8(v, this.offset++);
-  }
-  private writeU16(v: number) {
-    this.buffer.writeUInt16LE(v, this.offset);
-    this.offset += 2;
-  }
-  private writeU32(v: number) {
-    this.buffer.writeUInt32LE(v, this.offset);
-    this.offset += 4;
-  }
-  private writeF64(v: number) {
-    this.buffer.writeDoubleLE(v, this.offset);
-    this.offset += 8;
-  }
-  private writeBytes(v: Uint8Array) {
-    Buffer.from(v).copy(this.buffer, this.offset);
-    this.offset += v.length;
-  }
-  private writeString(v: string) {
-    const b = Buffer.from(v, "utf8");
-    this.writeU16(b.length);
-    this.writeBytes(b);
+    return this.writer.finish();
   }
 }
 
 export class TBCDecoder {
-  private buffer: Buffer;
-  private offset: number = 0;
-
+  private reader: ByteReader;
   constructor(data: Uint8Array) {
-    this.buffer = Buffer.from(data);
+    this.reader = new ByteReader(data);
   }
 
   decode(): TBCFile {
-    this.offset = 0;
-    const magic = this.readBytes(4);
+    const magic = this.reader.readBytes(4);
     if (magic[0] !== 0xde || magic[1] !== 0x05)
       throw new Error("Invalid TBC magic");
 
-    const constCount = this.readU16();
+    const constCount = this.reader.readU16();
     const consts: Value[] = [];
     for (let _i = 0; _i < constCount; _i++) {
-      const type = this.readU8();
+      const type = this.reader.readU8();
       switch (type) {
         case ConstType.NULL:
           consts.push(null);
           break;
         case ConstType.BOOL:
-          consts.push(this.readU8() !== 0);
+          consts.push(this.reader.readU8() !== 0);
           break;
         case ConstType.NUM:
-          consts.push(this.readF64());
+          consts.push(this.reader.readF64());
           break;
         case ConstType.STR:
-          consts.push(this.readString());
+          consts.push(this.reader.readString());
           break;
         default:
           throw new Error(`Unknown const type ${type}`);
       }
     }
 
-    const fnCount = this.readU16();
+    const fnCount = this.reader.readU16();
     const functions: TBCFunction[] = [];
     for (let _i = 0; _i < fnCount; _i++) {
-      const arity = this.readU16();
-      const locals = this.readU16();
-      const codeLen = this.readU32();
-      const code = this.readBytes(codeLen);
-      const handlerCount = this.readU16();
+      const arity = this.reader.readU16();
+      const locals = this.reader.readU16();
+      const codeLen = this.reader.readU32();
+      const code = this.reader.readBytes(codeLen);
+      const handlerCount = this.reader.readU16();
       const handlers: TBCHandler[] = [];
       for (let _j = 0; _j < handlerCount; _j++) {
-        const donePc = this.readU32();
-        const returnFnIndex = this.readU16();
-        const clauseCount = this.readU16();
+        const donePc = this.reader.readU32();
+        const returnFnIndex = this.reader.readU16();
+        const clauseCount = this.reader.readU16();
         const clauses: { effectNameConst: number; clauseFnIndex: number }[] =
           [];
         for (let _k = 0; _k < clauseCount; _k++) {
           clauses.push({
-            effectNameConst: this.readU16(),
-            clauseFnIndex: this.readU16(),
+            effectNameConst: this.reader.readU16(),
+            clauseFnIndex: this.reader.readU16(),
           });
         }
         handlers.push({ returnFnIndex, clauses, donePc });
@@ -193,36 +270,5 @@ export class TBCDecoder {
     }
 
     return { consts, functions };
-  }
-
-  private readU8() {
-    return this.buffer.readUInt8(this.offset++);
-  }
-  private readU16() {
-    const v = this.buffer.readUInt16LE(this.offset);
-    this.offset += 2;
-    return v;
-  }
-  private readU32() {
-    const v = this.buffer.readUInt32LE(this.offset);
-    this.offset += 4;
-    return v;
-  }
-  private readF64() {
-    const v = this.buffer.readDoubleLE(this.offset);
-    this.offset += 8;
-    return v;
-  }
-  private readBytes(n: number) {
-    const v = new Uint8Array(
-      this.buffer.subarray(this.offset, this.offset + n),
-    );
-    this.offset += n;
-    return v;
-  }
-  private readString() {
-    const len = this.readU16();
-    const b = this.readBytes(len);
-    return Buffer.from(b).toString("utf8");
   }
 }

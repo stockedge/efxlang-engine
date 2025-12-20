@@ -5,14 +5,30 @@ import { Env } from "./env";
 import { Fiber, Frame } from "./fiber";
 import { VMStatus, VMResult } from "./status";
 
+export type VMHooks = {
+  onPerform?: (args: { effect: string; argc: number }) => void;
+  onContCall?: (args: { oneShotUsedBefore: boolean }) => void;
+  onContReturn?: () => void;
+};
+
+export type VMOptions = {
+  debug?: boolean;
+  hooks?: VMHooks;
+};
+
 export class VM {
   private cycle: bigint = 0n;
   public lastPoppedValue: Value = null;
+  private debug: boolean;
+  private hooks?: VMHooks;
 
   constructor(
     private tbc: TBCFile,
     public fiber: Fiber = new Fiber(),
+    options: VMOptions = {},
   ) {
+    this.debug = options.debug ?? false;
+    this.hooks = options.hooks;
     if (this.fiber.callStack.length === 0) {
       const entryFn = tbc.functions[0];
       const env = new Env(undefined, entryFn.locals);
@@ -27,11 +43,6 @@ export class VM {
   run(): VMResult {
     let totalCycles = 0;
     while (this.fiber.callStack.length > 0) {
-      if (this.fiber.yielding && this.isHandleDoneReached()) {
-        this.returnToParentFiber();
-        continue;
-      }
-
       const res = this.step();
       totalCycles += res.cycles;
       if (res.status !== VMStatus.RUNNING) {
@@ -46,6 +57,12 @@ export class VM {
   }
 
   public step(): VMResult {
+    if (this.fiber.yielding && this.isHandleDoneReached()) {
+      this.returnToParentFiber();
+      this.hooks?.onContReturn?.();
+      return { status: VMStatus.RUNNING, cycles: 0 };
+    }
+
     const frame = this.fiber.callStack[this.fiber.callStack.length - 1];
     const fn = this.tbc.functions[frame.fnIndex];
     if (frame.ip >= fn.code.length) {
@@ -54,9 +71,11 @@ export class VM {
     }
 
     const opcode = fn.code[frame.ip++] as Opcode;
-    console.log(
-      `STEP: Fn${frame.fnIndex} @${frame.ip - 1} Op:0x${opcode.toString(16)} stack:${this.fiber.valueStack.length}`,
-    );
+    if (this.debug) {
+      console.log(
+        `STEP: Fn${frame.fnIndex} @${frame.ip - 1} Op:0x${opcode.toString(16)} stack:${this.fiber.valueStack.length}`,
+      );
+    }
     this.cycle++;
 
     switch (opcode) {
@@ -225,6 +244,10 @@ export class VM {
         const argc = this.readU16(frame, fn);
         const args = new Array(argc);
         for (let i = argc - 1; i >= 0; i--) args[i] = this.pop();
+        this.hooks?.onPerform?.({
+          effect: String(this.tbc.consts[nameIdx]),
+          argc,
+        });
         this.performEffect(nameIdx, args);
         break;
       }
@@ -307,6 +330,7 @@ export class VM {
         this.fiber.callStack.push({ fnIndex: callee.fnIndex, ip: 0, env });
         return;
       } else if (callee.tag === "Cont") {
+        this.hooks?.onContCall?.({ oneShotUsedBefore: callee.used });
         if (callee.used) throw new Error("ContinuationAlreadyUsed");
         callee.used = true;
         const parent = this.fiber;

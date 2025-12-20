@@ -50,8 +50,6 @@ export class Codegen {
         ? program.statements
         : [program.statements],
     );
-    console.log("Codegen Generated Functions:", this.functions.length);
-    console.log("Main fn code len:", this.functions[0]?.code.length);
     return {
       consts: this.consts,
       functions: this.functions,
@@ -259,10 +257,28 @@ export class Codegen {
   }
 
   private genBlock(block: BlockExpr): void {
-    for (const stmt of block.statements) this.genStmt(stmt);
+    let hasValueOnStack = false;
+
+    for (let i = 0; i < block.statements.length; i++) {
+      const stmt = block.statements[i];
+      const isLast = i === block.statements.length - 1;
+
+      // Treat the last expression statement as the block value even if it has a semicolon.
+      if (!block.tailExpr && isLast && stmt.kind === "ExprStmt") {
+        this.genExpr(stmt.expr);
+        hasValueOnStack = true;
+        continue;
+      }
+
+      this.genStmt(stmt);
+    }
+
     if (block.tailExpr) {
       this.genExpr(block.tailExpr);
-    } else {
+      hasValueOnStack = true;
+    }
+
+    if (!hasValueOnStack) {
       this.emit(Opcode.CONST);
       this.emitU16(this.addConst(null));
     }

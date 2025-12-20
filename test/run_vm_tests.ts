@@ -3,6 +3,7 @@ import { Parser } from "../src/lang/parser";
 import { Resolver } from "../src/lang/resolver";
 import { Codegen } from "../src/lang/codegen";
 import { VM } from "../src/vm/vm";
+import { VMStatus } from "../src/vm/status";
 import * as assert from "assert";
 
 function testVM() {
@@ -17,7 +18,7 @@ function testVM() {
     const tbc = new Codegen(result).generate(program);
 
     const vm = new VM(tbc);
-    const res = vm.run();
+    const res = runUntilHalt(vm);
     assert.strictEqual(res, 7);
     console.log("  ✓ Simple arithmetic");
   }
@@ -31,7 +32,7 @@ function testVM() {
     const tbc = new Codegen(result).generate(program);
 
     const vm = new VM(tbc);
-    const res = vm.run();
+    const res = runUntilHalt(vm);
     assert.strictEqual(res, 30);
     console.log("  ✓ Function call");
   }
@@ -45,7 +46,7 @@ function testVM() {
     const tbc = new Codegen(result).generate(program);
 
     const vm = new VM(tbc);
-    const res = vm.run();
+    const res = runUntilHalt(vm);
     assert.strictEqual(res, 11);
     console.log("  ✓ Effect handler (no resume)");
   }
@@ -60,12 +61,21 @@ function testVM() {
     const tbc = new Codegen(result).generate(program);
 
     const vm = new VM(tbc);
-    const res = vm.run();
+    const res = runUntilHalt(vm);
     assert.strictEqual(res, 21);
     console.log("  ✓ Effect handler (with resume)");
   }
 
   console.log("All VM tests passed!");
+}
+
+function runUntilHalt(vm: VM) {
+  while (true) {
+    const res = vm.run();
+    if (res.status === VMStatus.HALTED) return res.value ?? null;
+    if (res.status === VMStatus.SAFEPOINT) continue;
+    throw new Error(`Unexpected VM status: ${res.status}`);
+  }
 }
 
 try {

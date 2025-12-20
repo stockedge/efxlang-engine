@@ -1,0 +1,4 @@
+dist
+node_modules
+vm_log.txt
+package-lock.json

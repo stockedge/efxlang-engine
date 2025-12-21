@@ -138,6 +138,16 @@ export type CmdInputKbd = MsgBase & {
   payload: { byte: number; isDown: boolean };
 };
 
+export type CmdRunSampleSuite = MsgBase & {
+  type: "command";
+  command: "runSampleSuite";
+  payload: {
+    mode: "quick" | "full";
+    suiteId: string;
+    stopOnFirstFail: boolean;
+  };
+};
+
 export type CommandMessage =
   | CmdInit
   | CmdCompile
@@ -156,7 +166,8 @@ export type CommandMessage =
   | CmdReplayStart
   | CmdReplayStop
   | CmdGetState
-  | CmdInputKbd;
+  | CmdInputKbd
+  | CmdRunSampleSuite;
 
 export type RespOk = MsgBase & {
   type: "response";
@@ -263,9 +274,27 @@ export type DeosUiEvent =
       details?: unknown;
     };
 
+export type SuiteRunStatus = "passed" | "failed" | "error";
+
+export type SuiteProgressEvent = {
+  type: "suiteProgress";
+  suiteId: string;
+  sampleId: string;
+  runId: string;
+  index: number;
+  total: number;
+  status: "running" | SuiteRunStatus;
+  passCount: number;
+  failCount: number;
+  durationMs?: number;
+  summary?: string;
+};
+
+export type WorkerEvent = DeosUiEvent | SuiteProgressEvent;
+
 export type UiEventMessage = MsgBase & {
   type: "event";
-  event: DeosUiEvent;
+  event: WorkerEvent;
 };
 
 export type WorkerMessage = RespOk | RespErr | UiEventMessage | RespCompileOk;

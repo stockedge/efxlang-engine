@@ -4,6 +4,7 @@ import {
   type DeosUiEvent,
   EventMask,
   PROTOCOL_VERSION,
+  type SuiteProgressEvent,
   type WorkerMessage,
 } from "./protocol";
 import {
@@ -24,139 +25,247 @@ app.innerHTML = `
         <span class="mono" id="clock"></span>
       </div>
 
-      <div class="toolbar">
-        <div class="group">
-          <button class="btn" id="runAllSamples">Run All Samples</button>
-          <span class="pill mono" id="samplesStatus">Samples: ready</span>
-        </div>
-
-        <div class="group">
-          <button class="btn" id="run">Run</button>
-          <button class="btn secondary" id="pause">Pause</button>
-          <button class="btn secondary" id="step">Step</button>
-          <input class="input mono" id="stepN" value="1000" />
-          <button class="btn secondary" id="stepRun">Step xN</button>
-        </div>
-
-        <div class="group">
-          <input class="input mono" id="runToTick" placeholder="Run to tick" />
-          <button class="btn secondary" id="runTo">Run to tick</button>
-          <input class="input mono" id="revToTick" placeholder="Reverse to tick" />
-          <button class="btn secondary" id="revTo">Reverse</button>
-          <button class="btn secondary" id="reset">Reset</button>
-        </div>
-
-        <div class="group">
-          <button class="btn secondary" id="recordStart">Record Start</button>
-          <button class="btn secondary" id="recordStop">Record Stop</button>
-          <button class="btn secondary" id="downloadTrace">Download Trace</button>
-        </div>
-
-        <div class="group">
-          <input type="file" id="traceFile" accept=".json" />
-          <button class="btn secondary" id="replayStart">Replay Start</button>
-          <button class="btn secondary" id="replayStop">Replay Stop</button>
-        </div>
+      <div class="nav">
+        <button class="navbtn active" id="navHome" data-view="home">Home</button>
+        <button class="navbtn" id="navStudio" data-view="studio">Run Studio</button>
+        <button class="navbtn" id="navLibrary" data-view="library">Library</button>
       </div>
     </div>
 
-    <div class="main">
-      <div class="pane" id="left">
-        <div class="tabs">
-          <button class="tab active" data-tab="prog">Program</button>
-          <button class="tab" data-tab="policy">Scheduler Policy</button>
-          <button class="tab" data-tab="samples">Samples</button>
-        </div>
-
-        <div class="tabpanel active" id="tab-prog">
-          <div class="panel">
-            <div class="row">
-              <label class="mono">Module</label>
-              <input class="input mono" id="progModule" value="progA" />
-              <button class="btn secondary" id="compileProg">Compile & Load</button>
+    <div class="views">
+      <div class="view active" id="view-home">
+        <div class="home">
+          <div class="homebar">
+            <button class="btn big" id="runAllSamples">Run All Samples</button>
+            <div class="group">
+              <label class="mono"
+                ><input type="radio" name="suiteMode" value="quick" checked />
+                Quick</label
+              >
+              <label class="mono"
+                ><input type="radio" name="suiteMode" value="full" /> Full</label
+              >
+              <label class="mono"
+                ><input type="checkbox" id="stopOnFirstFail" checked /> Stop on
+                first fail</label
+              >
             </div>
-            <textarea class="textarea mono" id="progSrc"></textarea>
-            <div class="row">
-              <label class="mono">Create Task</label>
-              <input class="input mono" id="taskTid" value="1" />
-              <input class="input mono" id="taskModule" value="progA" />
-              <button class="btn secondary" id="createTask">Create</button>
+            <span class="pill mono" id="samplesStatus">Samples: ready</span>
+            <button class="btn secondary" id="clearSampleResults">
+              Clear Results
+            </button>
+          </div>
+
+          <div class="homegrid">
+            <div class="homeleft">
+              <div class="cards" id="sampleCards"></div>
+            </div>
+
+            <div class="homeright">
+              <div class="preview">
+                <div class="previewhead">
+                  <span class="pill mono" id="selectedSamplePill"
+                    >(no sample selected)</span
+                  >
+                  <div class="group">
+                    <button class="btn secondary" id="loadSelectedSample">
+                      Load to Studio
+                    </button>
+                    <button class="btn" id="runSelectedSample">
+                      Run This Sample
+                    </button>
+                    <button class="btn secondary" id="openStudioFromSample">
+                      Open Studio
+                    </button>
+                  </div>
+                </div>
+                <div class="previewbody">
+                  <div class="previewtitle" id="selectedSampleTitle"></div>
+                  <div class="previewdesc" id="selectedSampleDesc"></div>
+                </div>
+              </div>
+
+              <div class="sample-results mono" id="sampleResults"></div>
             </div>
           </div>
         </div>
+      </div>
 
-        <div class="tabpanel" id="tab-policy">
-          <div class="panel">
-            <div class="row">
-              <label class="mono">Module</label>
-              <input class="input mono" id="policyModule" value="sched" />
-              <button class="btn secondary" id="compilePolicy">Compile & Load</button>
-              <button class="btn secondary" id="setPolicy">Set Policy</button>
-              <button class="btn secondary" id="clearPolicy">Clear Policy</button>
+      <div class="view" id="view-studio">
+        <div class="studio">
+          <div class="studiobar">
+            <div class="group">
+              <button class="btn" id="run">Run</button>
+              <button class="btn secondary" id="pause">Pause</button>
+              <button class="btn secondary" id="step">Step</button>
+              <input class="input mono" id="stepN" value="1000" />
+              <button class="btn secondary" id="stepRun">Step xN</button>
             </div>
-            <textarea class="textarea mono" id="policySrc"></textarea>
+
+            <div class="group">
+              <input class="input mono" id="runToTick" placeholder="Run to tick" />
+              <button class="btn secondary" id="runTo">Run to tick</button>
+              <input class="input mono" id="revToTick" placeholder="Reverse to tick" />
+              <button class="btn secondary" id="revTo">Reverse</button>
+              <button class="btn secondary" id="reset">Reset</button>
+            </div>
+
+            <div class="group">
+              <button class="btn secondary" id="recordStart">Record Start</button>
+              <button class="btn secondary" id="recordStop">Record Stop</button>
+              <button class="btn secondary" id="downloadTrace">Download Trace</button>
+            </div>
           </div>
-        </div>
 
-        <div class="tabpanel" id="tab-samples">
-          <div class="panel">
-            <div class="row">
-              <span class="mono">Click a sample to load/run.</span>
-              <button class="btn secondary" id="clearSampleResults">Clear Results</button>
+          <div class="main">
+            <div class="pane" id="left">
+              <div class="tabs">
+                <button class="tab active" data-tab="prog">Program</button>
+                <button class="tab" data-tab="policy">Scheduler Policy</button>
+              </div>
+
+              <div class="tabpanel active" id="tab-prog">
+                <div class="panel">
+                  <div class="row">
+                    <label class="mono">Module</label>
+                    <input class="input mono" id="progModule" value="progA" />
+                    <button class="btn secondary" id="compileProg">
+                      Compile & Load
+                    </button>
+                  </div>
+                  <textarea class="textarea mono" id="progSrc"></textarea>
+                  <div class="row">
+                    <label class="mono">Create Task</label>
+                    <input class="input mono" id="taskTid" value="1" />
+                    <input class="input mono" id="taskModule" value="progA" />
+                    <button class="btn secondary" id="createTask">Create</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="tabpanel" id="tab-policy">
+                <div class="panel">
+                  <div class="row">
+                    <label class="mono">Module</label>
+                    <input class="input mono" id="policyModule" value="sched" />
+                    <button class="btn secondary" id="compilePolicy">
+                      Compile & Load
+                    </button>
+                    <button class="btn secondary" id="setPolicy">Set Policy</button>
+                    <button class="btn secondary" id="clearPolicy">
+                      Clear Policy
+                    </button>
+                  </div>
+                  <textarea class="textarea mono" id="policySrc"></textarea>
+                </div>
+              </div>
             </div>
-            <div class="cards" id="sampleCards"></div>
-            <div class="sample-results mono" id="sampleResults"></div>
+
+            <div class="pane" id="right">
+              <div class="tabs">
+                <button class="tab active" data-rtab="timeline">Timeline</button>
+                <button class="tab" data-rtab="inspector">Inspector</button>
+                <button class="tab" data-rtab="state">State</button>
+                <button class="tab" data-rtab="trace">Trace</button>
+              </div>
+
+              <div class="tabpanel active" id="rtab-timeline">
+                <div class="panel">
+                  <div class="row">
+                    <label class="mono"
+                      ><input type="checkbox" id="followTick" checked />
+                      Follow</label
+                    >
+                    <button class="btn secondary" id="clearTimeline">Clear</button>
+                  </div>
+                  <div class="timeline-panel">
+                    <div class="timeline-canvas" id="timelineCanvas">
+                      <svg class="timeline-svg" id="timelineSvg"></svg>
+                    </div>
+                    <div class="timeline mono" id="timeline"></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="tabpanel" id="rtab-inspector">
+                <div class="panel">
+                  <div class="row">
+                    <span class="pill mono" id="selectionPill"
+                      >tick=? (drag playhead / click event)</span
+                    >
+                    <button class="btn secondary" id="reverseSelected">
+                      Reverse to tick
+                    </button>
+                    <button class="btn secondary" id="copySelectionJson">
+                      Copy JSON
+                    </button>
+                  </div>
+                  <pre class="pre mono" id="inspector">(no selection)</pre>
+                </div>
+              </div>
+
+              <div class="tabpanel" id="rtab-state">
+                <div class="panel">
+                  <div class="row">
+                    <button class="btn secondary" id="refreshState">Refresh</button>
+                    <button class="btn secondary" id="refreshStateFull">Full</button>
+                  </div>
+                  <pre class="pre mono" id="state"></pre>
+                </div>
+              </div>
+
+              <div class="tabpanel" id="rtab-trace">
+                <div class="panel">
+                  <pre class="pre mono" id="traceInfo">(trace info)</pre>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="console">
+            <div class="consolebar">
+              <div class="group">
+                <label class="mono"
+                  ><input type="checkbox" id="autoScroll" checked />
+                  Auto-scroll</label
+                >
+                <select class="input mono" id="consoleTid">
+                  <option value="all">All TIDs</option>
+                </select>
+              </div>
+              <div class="group">
+                <button class="btn secondary" id="copyConsole">Copy</button>
+                <button class="btn secondary" id="clearConsole">Clear</button>
+              </div>
+            </div>
+            <div class="consolebody mono" id="console"></div>
           </div>
         </div>
       </div>
 
-      <div class="pane" id="right">
-        <div class="tabs">
-          <button class="tab active" data-rtab="timeline">Timeline</button>
-          <button class="tab" data-rtab="state">State</button>
-          <button class="tab" data-rtab="trace">Trace</button>
-        </div>
-
-        <div class="tabpanel active" id="rtab-timeline">
-          <div class="panel">
-            <div class="row">
-              <label class="mono"><input type="checkbox" id="followTick" checked /> Follow</label>
-              <button class="btn secondary" id="clearTimeline">Clear</button>
-            </div>
-            <div class="timeline mono" id="timeline"></div>
+      <div class="view" id="view-library">
+        <div class="library">
+          <div class="librarybar">
+            <input type="file" id="traceFile" accept=".json" />
+            <button class="btn secondary" id="replayStart">Replay Start</button>
+            <button class="btn secondary" id="replayStop">Replay Stop</button>
+            <button class="btn secondary" id="openStudioFromLibrary">
+              Open Studio
+            </button>
           </div>
-        </div>
-
-        <div class="tabpanel" id="rtab-state">
           <div class="panel">
-            <div class="row">
-              <button class="btn secondary" id="refreshState">Refresh</button>
-              <button class="btn secondary" id="refreshStateFull">Full</button>
+            <div class="mono">
+              Load a trace JSON here. Use Run Studio &gt; Trace tab to inspect it.
             </div>
-            <pre class="pre mono" id="state"></pre>
-          </div>
-        </div>
-
-        <div class="tabpanel" id="rtab-trace">
-          <div class="panel">
-            <pre class="pre mono" id="traceInfo">(trace info)</pre>
           </div>
         </div>
       </div>
-    </div>
-
-    <div class="console">
-      <div class="consolebar">
-        <label class="mono"><input type="checkbox" id="autoScroll" checked /> Auto-scroll</label>
-        <button class="btn secondary" id="clearConsole">Clear</button>
-      </div>
-      <div class="consolebody mono" id="console"></div>
     </div>
   </div>
 `;
 
-function $(id: string): HTMLElement {
-  const el = document.getElementById(id);
+function $(id: string): Element {
+  const el = document.querySelector(`#${CSS.escape(id)}`);
   if (!el) throw new Error(`#${id} not found`);
   return el;
 }
@@ -166,13 +275,45 @@ const samplesStatusEl = $("samplesStatus") as HTMLSpanElement;
 const clockEl = $("clock") as HTMLSpanElement;
 const consoleEl = $("console") as HTMLDivElement;
 const timelineEl = $("timeline") as HTMLDivElement;
+const timelineCanvasEl = $("timelineCanvas") as HTMLDivElement;
+const timelineSvgEl = $("timelineSvg") as SVGSVGElement;
 const stateEl = $("state") as HTMLPreElement;
 const traceInfoEl = $("traceInfo") as HTMLPreElement;
+const selectionPillEl = $("selectionPill") as HTMLSpanElement;
+const reverseSelectedBtn = $("reverseSelected") as HTMLButtonElement;
+const copySelectionJsonBtn = $("copySelectionJson") as HTMLButtonElement;
+const inspectorEl = $("inspector") as HTMLPreElement;
 const sampleCardsEl = $("sampleCards") as HTMLDivElement;
 const sampleResultsEl = $("sampleResults") as HTMLDivElement;
 
+const navHomeEl = $("navHome") as HTMLButtonElement;
+const navStudioEl = $("navStudio") as HTMLButtonElement;
+const navLibraryEl = $("navLibrary") as HTMLButtonElement;
+const viewHomeEl = $("view-home") as HTMLDivElement;
+const viewStudioEl = $("view-studio") as HTMLDivElement;
+const viewLibraryEl = $("view-library") as HTMLDivElement;
+
+const suiteModeFullElMaybe = document.querySelector<HTMLInputElement>(
+  'input[name="suiteMode"][value="full"]',
+);
+if (!suiteModeFullElMaybe) throw new Error("suiteMode full not found");
+const suiteModeFullEl = suiteModeFullElMaybe;
+const stopOnFirstFailEl = $("stopOnFirstFail") as HTMLInputElement;
+
+const selectedSamplePillEl = $("selectedSamplePill") as HTMLSpanElement;
+const selectedSampleTitleEl = $("selectedSampleTitle") as HTMLDivElement;
+const selectedSampleDescEl = $("selectedSampleDesc") as HTMLDivElement;
+const loadSelectedSampleBtn = $("loadSelectedSample") as HTMLButtonElement;
+const runSelectedSampleBtn = $("runSelectedSample") as HTMLButtonElement;
+const openStudioFromSampleBtn = $("openStudioFromSample") as HTMLButtonElement;
+const openStudioFromLibraryBtn = $(
+  "openStudioFromLibrary",
+) as HTMLButtonElement;
+
 const followTickEl = $("followTick") as HTMLInputElement;
 const autoScrollEl = $("autoScroll") as HTMLInputElement;
+const consoleTidEl = $("consoleTid") as HTMLSelectElement;
+const copyConsoleBtn = $("copyConsole") as HTMLButtonElement;
 
 const worker = new Worker(new URL("./worker.ts", import.meta.url), {
   type: "module",
@@ -180,6 +321,30 @@ const worker = new Worker(new URL("./worker.ts", import.meta.url), {
 
 type UiMode = "Idle" | "Running" | "Paused" | "Recording" | "Replay";
 let uiMode: UiMode = "Idle";
+
+type ViewKey = "home" | "studio" | "library";
+function setView(next: ViewKey) {
+  studioIngestEnabled = next === "studio";
+  const views: Array<{
+    key: ViewKey;
+    el: HTMLElement;
+    nav: HTMLButtonElement;
+  }> = [
+    { key: "home", el: viewHomeEl, nav: navHomeEl },
+    { key: "studio", el: viewStudioEl, nav: navStudioEl },
+    { key: "library", el: viewLibraryEl, nav: navLibraryEl },
+  ];
+
+  for (const v of views) {
+    if (v.key === next) {
+      v.el.classList.add("active");
+      v.nav.classList.add("active");
+    } else {
+      v.el.classList.remove("active");
+      v.nav.classList.remove("active");
+    }
+  }
+}
 
 const pending = new Map<
   string,
@@ -196,6 +361,10 @@ worker.onmessage = (ev: MessageEvent<WorkerMessage>) => {
     pending.delete(msg.requestId);
     if (msg.ok) cb.resolve(msg.payload);
     else cb.reject(msg.error);
+    return;
+  }
+  if (msg.event.type === "suiteProgress") {
+    onSuiteProgress(msg.event);
     return;
   }
   onEngineEvent(msg.event);
@@ -226,16 +395,11 @@ function setUiMode(next: UiMode) {
 
 function formatCycleShort(cycle: string) {
   if (cycle.length <= 10) return cycle;
-  return `${cycle.slice(0, 4)}…${cycle.slice(-4)}`;
+  return `${cycle.slice(0, 4)}\u2026${cycle.slice(-4)}`;
 }
 
 function updateClock(cycle: string, tick: number) {
   clockEl.textContent = `tick=${String(tick)} cycle=${formatCycleShort(cycle)}`;
-}
-
-function appendConsoleLine(text: string) {
-  consoleEl.textContent += text;
-  if (autoScrollEl.checked) consoleEl.scrollTop = consoleEl.scrollHeight;
 }
 
 function appendTimelineLine(line: string, tick?: number, kind?: string) {
@@ -245,6 +409,7 @@ function appendTimelineLine(line: string, tick?: number, kind?: string) {
   if (typeof tick === "number") {
     div.dataset.tick = String(tick);
     div.onclick = () => {
+      selectTick(tick);
       const input = document.querySelector<HTMLInputElement>("#revToTick");
       if (input) input.value = String(tick);
     };
@@ -253,14 +418,613 @@ function appendTimelineLine(line: string, tick?: number, kind?: string) {
   if (followTickEl.checked) timelineEl.scrollTop = timelineEl.scrollHeight;
 }
 
+type TimelineWindow = {
+  startTick: number;
+  endTick: number;
+  tickPx: number;
+  laneLabelWidth: number;
+};
+
+const TIMELINE_TICK_PX = 10;
+const TIMELINE_LANE_HEIGHT = 24;
+const TIMELINE_LANE_LABEL_WIDTH = 56;
+const TIMELINE_TOP_PAD = 18;
+const TIMELINE_LEFT_PAD = 8;
+const TIMELINE_WINDOW_TICKS = 140;
+const MAX_STUDIO_EVENTS = 5_000;
+
+let studioIngestEnabled = false;
+let lastEngineTick = 0;
+let studioViewTick = 0;
+let studioSelectedTick: number | null = null;
+let studioSelectedEventIndex: number | null = null;
+const studioEvents: DeosUiEvent[] = [];
+let consoleStartIndex = 0;
+let consoleFilterTid: number | null = null;
+const consoleTidSet = new Set<number>();
+
+let timelineWindow: TimelineWindow = {
+  startTick: 0,
+  endTick: 0,
+  tickPx: TIMELINE_TICK_PX,
+  laneLabelWidth: TIMELINE_LANE_LABEL_WIDTH,
+};
+let timelineRenderPending = false;
+
+function clamp(n: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, n));
+}
+
+function trimStudioEventsToMax() {
+  const overflow = studioEvents.length - MAX_STUDIO_EVENTS;
+  if (overflow <= 0) return;
+
+  studioEvents.splice(0, overflow);
+  consoleStartIndex = Math.max(0, consoleStartIndex - overflow);
+
+  if (studioSelectedEventIndex !== null) {
+    studioSelectedEventIndex -= overflow;
+    if (studioSelectedEventIndex < 0) studioSelectedEventIndex = null;
+  }
+}
+
+function resetConsoleUi() {
+  consoleStartIndex = 0;
+  consoleFilterTid = null;
+  consoleTidSet.clear();
+  consoleTidEl.value = "all";
+
+  while (consoleTidEl.options.length > 1) {
+    consoleTidEl.remove(1);
+  }
+
+  renderConsole();
+}
+
+function maybeAddConsoleTidOption(tid: number) {
+  if (consoleTidSet.has(tid)) return;
+  consoleTidSet.add(tid);
+  const opt = document.createElement("option");
+  opt.value = String(tid);
+  opt.textContent = `tid ${String(tid)}`;
+  consoleTidEl.appendChild(opt);
+}
+
+function renderConsole() {
+  let text = "";
+  for (let i = consoleStartIndex; i < studioEvents.length; i++) {
+    const ev = studioEvents[i];
+    if (ev.type !== "console") continue;
+    if (consoleFilterTid !== null && ev.tid !== consoleFilterTid) continue;
+    text += ev.text;
+  }
+  consoleEl.textContent = text;
+  if (autoScrollEl.checked) consoleEl.scrollTop = consoleEl.scrollHeight;
+}
+
+function updateSelectionUi() {
+  const tick = studioSelectedTick ?? studioViewTick;
+  selectionPillEl.textContent = `tick=${String(tick)} (drag playhead / click event)`;
+  reverseSelectedBtn.disabled = studioSelectedTick === null;
+
+  if (studioSelectedEventIndex === null) {
+    inspectorEl.textContent =
+      studioSelectedTick === null
+        ? "(no selection)"
+        : `tick=${String(studioSelectedTick)}`;
+    return;
+  }
+
+  const ev = studioEvents.at(studioSelectedEventIndex) ?? null;
+  inspectorEl.textContent = ev
+    ? JSON.stringify(ev, null, 2)
+    : "(event not found)";
+}
+
+function selectTick(tick: number) {
+  studioSelectedEventIndex = null;
+  studioSelectedTick = clamp(tick, 0, Number.MAX_SAFE_INTEGER);
+  studioViewTick = studioSelectedTick;
+  updateSelectionUi();
+  scheduleTimelineRender();
+}
+
+function selectEventIndex(idx: number) {
+  const ev = studioEvents.at(idx);
+  if (!ev) return;
+  studioSelectedEventIndex = idx;
+  studioSelectedTick = ev.tick;
+  studioViewTick = ev.tick;
+  updateSelectionUi();
+  scheduleTimelineRender();
+}
+
+function clearStudioUiOnly() {
+  studioEvents.length = 0;
+  resetConsoleUi();
+  studioSelectedEventIndex = null;
+  studioSelectedTick = null;
+  studioViewTick = 0;
+  timelineEl.textContent = "";
+  timelineSvgEl.replaceChildren();
+  timelineSvgEl.removeAttribute("width");
+  timelineSvgEl.removeAttribute("height");
+  inspectorEl.textContent = "(no selection)";
+  selectionPillEl.textContent = "tick=? (drag playhead / click event)";
+  reverseSelectedBtn.disabled = true;
+}
+
+function scheduleTimelineRender() {
+  if (timelineRenderPending) return;
+  timelineRenderPending = true;
+  requestAnimationFrame(() => {
+    timelineRenderPending = false;
+    renderTimelineSvg();
+  });
+}
+
+function svgEl<K extends keyof SVGElementTagNameMap>(
+  tag: K,
+  attrs?: Record<string, string>,
+): SVGElementTagNameMap[K] {
+  const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  if (attrs) for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+  return el;
+}
+
+function svgTitle(el: SVGElement, text: string) {
+  const title = svgEl("title");
+  title.textContent = text;
+  el.appendChild(title);
+}
+
+function renderTimelineSvg() {
+  const endTick = studioViewTick;
+  const startTick = Math.max(0, endTick - (TIMELINE_WINDOW_TICKS - 1));
+
+  timelineWindow = {
+    startTick,
+    endTick,
+    tickPx: TIMELINE_TICK_PX,
+    laneLabelWidth: TIMELINE_LANE_LABEL_WIDTH,
+  };
+
+  const tidSet = new Set<number>();
+  tidSet.add(0);
+  for (const ev of studioEvents) {
+    switch (ev.type) {
+      case "console":
+      case "perform":
+      case "contCall":
+      case "contReturn":
+        tidSet.add(ev.tid);
+        break;
+      case "inputConsumed":
+        tidSet.add(0);
+        break;
+      case "taskSwitch":
+        tidSet.add(ev.fromTid);
+        tidSet.add(ev.toTid);
+        break;
+      case "policyPick":
+        tidSet.add(ev.currentTid);
+        break;
+      case "error":
+        if (typeof ev.tid === "number") tidSet.add(ev.tid);
+        break;
+      case "tick":
+        break;
+    }
+  }
+
+  const tids = Array.from(tidSet.values()).sort((a, b) => a - b);
+
+  const laneCount = tids.length;
+  const laneHeight = TIMELINE_LANE_HEIGHT;
+  const topPad = TIMELINE_TOP_PAD;
+  const leftPad = TIMELINE_LEFT_PAD;
+  const labelW = TIMELINE_LANE_LABEL_WIDTH;
+  const tickPx = TIMELINE_TICK_PX;
+
+  const width = leftPad + labelW + (endTick - startTick + 1) * tickPx + 10;
+  const height = topPad + laneCount * laneHeight + 14;
+
+  timelineSvgEl.replaceChildren();
+  timelineSvgEl.setAttribute("width", String(width));
+  timelineSvgEl.setAttribute("height", String(height));
+  timelineSvgEl.setAttribute(
+    "viewBox",
+    `0 0 ${String(width)} ${String(height)}`,
+  );
+
+  const defs = svgEl("defs");
+  const marker = svgEl("marker", {
+    id: "arrow",
+    viewBox: "0 0 10 10",
+    refX: "8",
+    refY: "5",
+    markerWidth: "6",
+    markerHeight: "6",
+    orient: "auto-start-reverse",
+  });
+  marker.appendChild(
+    svgEl("path", { d: "M 0 0 L 10 5 L 0 10 z", fill: "#2ea043" }),
+  );
+  defs.appendChild(marker);
+  timelineSvgEl.appendChild(defs);
+
+  timelineSvgEl.appendChild(
+    svgEl("rect", {
+      x: "0",
+      y: "0",
+      width: String(width),
+      height: String(height),
+      fill: "#0b0d10",
+    }),
+  );
+
+  // Tick grid (major every 10).
+  for (let t = startTick; t <= endTick; t++) {
+    const x = leftPad + labelW + (t - startTick) * tickPx;
+    const major = t % 10 === 0;
+    timelineSvgEl.appendChild(
+      svgEl("line", {
+        x1: String(x),
+        y1: "0",
+        x2: String(x),
+        y2: String(height),
+        stroke: major ? "rgba(157,167,179,0.22)" : "rgba(157,167,179,0.08)",
+        "stroke-width": major ? "1" : "1",
+      }),
+    );
+    if (major) {
+      const label = svgEl("text", {
+        x: String(x + 2),
+        y: String(12),
+        fill: "#9da7b3",
+        "font-size": "10",
+      });
+      label.textContent = String(t);
+      timelineSvgEl.appendChild(label);
+    }
+  }
+
+  const yForTid = new Map<number, number>();
+  for (let i = 0; i < tids.length; i++) {
+    const tid = tids[i];
+    const y = topPad + i * laneHeight + laneHeight / 2;
+    yForTid.set(tid, y);
+
+    // Lane separator
+    timelineSvgEl.appendChild(
+      svgEl("line", {
+        x1: "0",
+        y1: String(topPad + i * laneHeight),
+        x2: String(width),
+        y2: String(topPad + i * laneHeight),
+        stroke: "rgba(32,39,52,0.85)",
+        "stroke-width": "1",
+      }),
+    );
+
+    // Lane label
+    const label = svgEl("text", {
+      x: String(leftPad),
+      y: String(y + 4),
+      fill: "#e6edf3",
+      "font-size": "11",
+    });
+    label.textContent = tid === 0 ? "idle" : `tid ${String(tid)}`;
+    timelineSvgEl.appendChild(label);
+  }
+
+  // Event glyphs
+  for (let i = 0; i < studioEvents.length; i++) {
+    const ev = studioEvents[i];
+    if (ev.tick < startTick || ev.tick > endTick) continue;
+    if (ev.type === "tick") continue;
+
+    const x = leftPad + labelW + (ev.tick - startTick) * tickPx;
+    const isSelected = studioSelectedEventIndex === i;
+
+    const addHit = (el: SVGElement, titleText: string) => {
+      el.dataset.eventIndex = String(i);
+      el.style.cursor = "pointer";
+      if (isSelected) el.setAttribute("stroke", "rgba(255,255,255,0.9)");
+      svgTitle(el, titleText);
+      return el;
+    };
+
+    if (ev.type === "taskSwitch") {
+      const y1 = yForTid.get(ev.fromTid) ?? yForTid.get(tids[0]) ?? topPad;
+      const y2 = yForTid.get(ev.toTid) ?? yForTid.get(tids[0]) ?? topPad;
+      timelineSvgEl.appendChild(
+        addHit(
+          svgEl("line", {
+            x1: String(x),
+            y1: String(y1),
+            x2: String(x),
+            y2: String(y2),
+            stroke: "#2ea043",
+            "stroke-width": "2",
+            "marker-end": "url(#arrow)",
+          }),
+          `taskSwitch ${String(ev.fromTid)}→${String(ev.toTid)} (${ev.reason}) tick=${String(ev.tick)}`,
+        ),
+      );
+      continue;
+    }
+
+    const tid =
+      ev.type === "policyPick"
+        ? ev.currentTid
+        : "tid" in ev && typeof ev.tid === "number"
+          ? ev.tid
+          : tids[0];
+    const y = yForTid.get(tid) ?? yForTid.get(tids[0]) ?? topPad;
+
+    switch (ev.type) {
+      case "perform": {
+        const size = 6;
+        timelineSvgEl.appendChild(
+          addHit(
+            svgEl("path", {
+              d: `M ${String(x)} ${String(y - size)} L ${String(x + size)} ${String(y)} L ${String(x)} ${String(y + size)} L ${String(x - size)} ${String(y)} Z`,
+              fill: "#a371f7",
+              stroke: isSelected ? "rgba(255,255,255,0.9)" : "rgba(0,0,0,0)",
+              "stroke-width": "2",
+            }),
+            `perform ${ev.effect} argc=${String(ev.argc)} tid=${String(ev.tid)} tick=${String(ev.tick)}`,
+          ),
+        );
+        break;
+      }
+      case "contCall": {
+        timelineSvgEl.appendChild(
+          addHit(
+            svgEl("circle", {
+              cx: String(x),
+              cy: String(y),
+              r: "5",
+              fill: "#d29922",
+              stroke: isSelected ? "rgba(255,255,255,0.9)" : "rgba(0,0,0,0)",
+              "stroke-width": "2",
+            }),
+            `contCall tid=${String(ev.tid)} usedBefore=${String(ev.oneShotUsedBefore)} tick=${String(ev.tick)}`,
+          ),
+        );
+        break;
+      }
+      case "contReturn": {
+        timelineSvgEl.appendChild(
+          addHit(
+            svgEl("circle", {
+              cx: String(x),
+              cy: String(y),
+              r: "5",
+              fill: "transparent",
+              stroke: "#d29922",
+              "stroke-width": isSelected ? "3" : "2",
+            }),
+            `contReturn tid=${String(ev.tid)} tick=${String(ev.tick)}`,
+          ),
+        );
+        break;
+      }
+      case "inputConsumed": {
+        const size = 6;
+        timelineSvgEl.appendChild(
+          addHit(
+            svgEl("path", {
+              d: `M ${String(x)} ${String(y - size)} L ${String(x + size)} ${String(y + size)} L ${String(x - size)} ${String(y + size)} Z`,
+              fill: "#7dd3fc",
+              stroke: isSelected ? "rgba(255,255,255,0.9)" : "rgba(0,0,0,0)",
+              "stroke-width": "2",
+            }),
+            `inputConsumed byte=${String(ev.byte)} isDown=${String(ev.isDown)} tick=${String(ev.tick)}`,
+          ),
+        );
+        break;
+      }
+      case "policyPick": {
+        timelineSvgEl.appendChild(
+          addHit(
+            svgEl("rect", {
+              x: String(x - 5),
+              y: String(y - 5),
+              width: "10",
+              height: "10",
+              fill: "#ec4899",
+              stroke: isSelected ? "rgba(255,255,255,0.9)" : "rgba(0,0,0,0)",
+              "stroke-width": "2",
+            }),
+            `policyPick currentTid=${String(ev.currentTid)} pickedIndex=${String(ev.pickedIndex)} runnable=[${ev.runnableTids.map(String).join(",")}] tick=${String(ev.tick)}`,
+          ),
+        );
+        break;
+      }
+      case "error": {
+        const size = 6;
+        timelineSvgEl.appendChild(
+          addHit(
+            svgEl("path", {
+              d: `M ${String(x - size)} ${String(y - size)} L ${String(x + size)} ${String(y + size)} M ${String(x - size)} ${String(y + size)} L ${String(x + size)} ${String(y - size)}`,
+              fill: "transparent",
+              stroke: "#f85149",
+              "stroke-width": isSelected ? "3" : "2",
+            }),
+            `error ${ev.code}: ${ev.message} tick=${String(ev.tick)}`,
+          ),
+        );
+        break;
+      }
+      case "console": {
+        timelineSvgEl.appendChild(
+          addHit(
+            svgEl("circle", {
+              cx: String(x),
+              cy: String(y),
+              r: "4",
+              fill: "#9da7b3",
+              stroke: isSelected ? "rgba(255,255,255,0.9)" : "rgba(0,0,0,0)",
+              "stroke-width": "2",
+            }),
+            `console tid=${String(ev.tid)} tick=${String(ev.tick)} text=${JSON.stringify(ev.text.slice(0, 40))}`,
+          ),
+        );
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  // Playhead (view tick)
+  {
+    const x =
+      leftPad +
+      labelW +
+      (clamp(studioViewTick, startTick, endTick) - startTick) * tickPx;
+    timelineSvgEl.appendChild(
+      svgEl("line", {
+        x1: String(x),
+        y1: "0",
+        x2: String(x),
+        y2: String(height),
+        stroke: "rgba(31,111,235,0.85)",
+        "stroke-width": "2",
+      }),
+    );
+  }
+
+  // Keep playhead in view when following.
+  if (followTickEl.checked) {
+    const playheadX = leftPad + labelW + (endTick - startTick) * tickPx;
+    const viewportW = timelineCanvasEl.clientWidth;
+    const target = Math.max(0, playheadX - Math.floor(viewportW * 0.7));
+    timelineCanvasEl.scrollLeft = target;
+  }
+}
+
+function tickFromClientX(clientX: number): number {
+  const rect = timelineCanvasEl.getBoundingClientRect();
+  const x = clientX - rect.left + timelineCanvasEl.scrollLeft;
+  const localX = x - TIMELINE_LEFT_PAD - timelineWindow.laneLabelWidth;
+  const t =
+    timelineWindow.startTick + Math.round(localX / timelineWindow.tickPx);
+  return clamp(t, 0, Number.MAX_SAFE_INTEGER);
+}
+
+let isDraggingPlayhead = false;
+timelineSvgEl.addEventListener("pointerdown", (ev) => {
+  const target = ev.target as Element | null;
+  const hit = target?.closest<SVGElement>("[data-event-index]") ?? null;
+  if (hit) {
+    const raw = hit.dataset.eventIndex;
+    const idx = raw ? Number(raw) : NaN;
+    if (Number.isFinite(idx)) {
+      selectEventIndex(idx);
+      return;
+    }
+  }
+
+  isDraggingPlayhead = true;
+  followTickEl.checked = false;
+  selectTick(tickFromClientX(ev.clientX));
+  timelineSvgEl.setPointerCapture(ev.pointerId);
+});
+timelineSvgEl.addEventListener("pointermove", (ev) => {
+  if (!isDraggingPlayhead) return;
+  selectTick(tickFromClientX(ev.clientX));
+});
+timelineSvgEl.addEventListener("pointerup", () => {
+  isDraggingPlayhead = false;
+});
+timelineSvgEl.addEventListener("pointercancel", () => {
+  isDraggingPlayhead = false;
+});
+
+followTickEl.addEventListener("change", () => {
+  if (!followTickEl.checked) return;
+  studioViewTick = lastEngineTick;
+  studioSelectedTick ??= studioViewTick;
+  updateSelectionUi();
+  scheduleTimelineRender();
+});
+
+reverseSelectedBtn.onclick = async () => {
+  const tick = studioSelectedTick;
+  if (tick === null) return;
+  setView("studio");
+  try {
+    // Clear UI-only timeline to avoid confusing "branch" outputs.
+    clearStudioUiOnly();
+    studioSelectedTick = tick;
+    studioViewTick = tick;
+    updateSelectionUi();
+
+    await sendCommand("reverseToTick", { tick });
+    setUiMode("Paused");
+    await refreshState("full");
+  } catch (e: unknown) {
+    appendTimelineLine(
+      `reverseToTick error: ${JSON.stringify(e)}`,
+      tick,
+      "error",
+    );
+  } finally {
+    updateSelectionUi();
+    scheduleTimelineRender();
+  }
+};
+
+function fallbackCopy(text: string) {
+  // Best-effort fallback without deprecated execCommand().
+  window.prompt("Copy to clipboard:", text);
+}
+
+copySelectionJsonBtn.onclick = async () => {
+  const text =
+    studioSelectedEventIndex !== null
+      ? JSON.stringify(
+          studioEvents.at(studioSelectedEventIndex) ?? null,
+          null,
+          2,
+        )
+      : JSON.stringify({ tick: studioSelectedTick }, null, 2);
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    fallbackCopy(text);
+  }
+};
+
 function onEngineEvent(ev: DeosUiEvent) {
   for (const cb of engineEventSubscribers) cb(ev);
 
-  if ("cycle" in ev && "tick" in ev) updateClock(ev.cycle, ev.tick);
+  if ("cycle" in ev && "tick" in ev) {
+    lastEngineTick = ev.tick;
+    updateClock(ev.cycle, ev.tick);
+    if (followTickEl.checked) {
+      studioViewTick = ev.tick;
+      studioSelectedTick ??= ev.tick;
+    }
+  }
+
+  if (!studioIngestEnabled) return;
 
   if (ev.type === "console") {
-    appendConsoleLine(ev.text);
+    studioEvents.push(ev);
+    trimStudioEventsToMax();
+    maybeAddConsoleTidOption(ev.tid);
+    renderConsole();
+    scheduleTimelineRender();
     return;
+  }
+
+  if (ev.type !== "tick") {
+    studioEvents.push(ev);
+    trimStudioEventsToMax();
   }
 
   switch (ev.type) {
@@ -270,6 +1034,7 @@ function onEngineEvent(ev: DeosUiEvent) {
         ev.tick,
         ev.type,
       );
+      scheduleTimelineRender();
       return;
     case "taskSwitch":
       appendTimelineLine(
@@ -279,6 +1044,7 @@ function onEngineEvent(ev: DeosUiEvent) {
         ev.tick,
         ev.type,
       );
+      scheduleTimelineRender();
       return;
     case "perform":
       appendTimelineLine(
@@ -288,6 +1054,7 @@ function onEngineEvent(ev: DeosUiEvent) {
         ev.tick,
         ev.type,
       );
+      scheduleTimelineRender();
       return;
     case "contCall":
       appendTimelineLine(
@@ -297,6 +1064,7 @@ function onEngineEvent(ev: DeosUiEvent) {
         ev.tick,
         ev.type,
       );
+      scheduleTimelineRender();
       return;
     case "contReturn":
       appendTimelineLine(
@@ -304,6 +1072,7 @@ function onEngineEvent(ev: DeosUiEvent) {
         ev.tick,
         ev.type,
       );
+      scheduleTimelineRender();
       return;
     case "inputConsumed":
       appendTimelineLine(
@@ -313,6 +1082,7 @@ function onEngineEvent(ev: DeosUiEvent) {
         ev.tick,
         ev.type,
       );
+      scheduleTimelineRender();
       return;
     case "policyPick":
       appendTimelineLine(
@@ -322,6 +1092,7 @@ function onEngineEvent(ev: DeosUiEvent) {
         ev.tick,
         ev.type,
       );
+      scheduleTimelineRender();
       return;
     case "error":
       appendTimelineLine(
@@ -329,6 +1100,7 @@ function onEngineEvent(ev: DeosUiEvent) {
         ev.tick,
         ev.type,
       );
+      scheduleTimelineRender();
       return;
   }
 }
@@ -391,6 +1163,22 @@ function bindRightTabs() {
 bindLeftTabs();
 bindRightTabs();
 
+navHomeEl.onclick = () => {
+  setView("home");
+};
+navStudioEl.onclick = () => {
+  setView("studio");
+};
+navLibraryEl.onclick = () => {
+  setView("library");
+};
+openStudioFromLibraryBtn.onclick = () => {
+  setView("studio");
+};
+openStudioFromSampleBtn.onclick = () => {
+  setView("studio");
+};
+
 const DEFAULT_ENGINE_CONFIG: SampleRunnerConfig = {
   cyclesPerTick: 10_000,
   timesliceTicks: 1,
@@ -408,6 +1196,7 @@ const DEFAULT_ENGINE_CONFIG: SampleRunnerConfig = {
 
 type SampleCardUi = {
   sample: SampleDefinition;
+  card: HTMLDivElement;
   statusDot: HTMLSpanElement;
   statusText: HTMLSpanElement;
   signalByKey: Map<string, HTMLSpanElement>;
@@ -416,6 +1205,48 @@ type SampleCardUi = {
 };
 
 const sampleCardUiById = new Map<string, SampleCardUi>();
+let selectedSample: SampleDefinition | null = null;
+
+function setSelectedSample(sample: SampleDefinition | null) {
+  selectedSample = sample;
+  selectedSamplePillEl.textContent = sample
+    ? sample.id
+    : "(no sample selected)";
+  selectedSampleTitleEl.textContent = sample ? sample.title : "";
+  selectedSampleDescEl.textContent = sample ? sample.description : "";
+
+  const enabled = sample !== null;
+  loadSelectedSampleBtn.disabled = !enabled;
+  runSelectedSampleBtn.disabled = !enabled;
+  openStudioFromSampleBtn.disabled = !enabled;
+
+  for (const ui of sampleCardUiById.values()) {
+    ui.card.classList.toggle("selected", sample?.id === ui.sample.id);
+  }
+}
+
+function loadSampleIntoStudio(sample: SampleDefinition) {
+  setSelectedSample(sample);
+
+  const firstProg = sample.modules.find((m) => m.role === "program") ?? null;
+  if (firstProg)
+    loadModuleIntoEditor(firstProg.moduleName, firstProg.sourceText, "program");
+  const firstPolicy = sample.modules.find((m) => m.role === "policy") ?? null;
+  if (firstPolicy)
+    loadModuleIntoEditor(
+      firstPolicy.moduleName,
+      firstPolicy.sourceText,
+      "policy",
+    );
+
+  const firstTask = sample.tasks.at(0) ?? null;
+  if (firstTask) {
+    ($("taskTid") as HTMLInputElement).value = String(firstTask.tid);
+    ($("taskModule") as HTMLInputElement).value = firstTask.moduleName;
+  }
+
+  setView("studio");
+}
 
 function setSamplesStatus(
   text: string,
@@ -473,6 +1304,7 @@ function loadModuleIntoEditor(
   sourceText: string,
   role: "program" | "policy",
 ) {
+  setView("studio");
   if (role === "program") {
     ($("progModule") as HTMLInputElement).value = moduleName;
     ($("progSrc") as HTMLTextAreaElement).value = sourceText;
@@ -527,6 +1359,11 @@ function renderSampleCards() {
   for (const sample of samples) {
     const card = document.createElement("div");
     card.className = "card";
+    card.onclick = (ev) => {
+      const target = ev.target as HTMLElement | null;
+      if (target?.closest("button")) return;
+      setSelectedSample(sample);
+    };
 
     const header = document.createElement("div");
     header.className = "card-header";
@@ -607,34 +1444,16 @@ function renderSampleCards() {
     loadBtn.className = "btn secondary";
     loadBtn.textContent = "Load";
     loadBtn.onclick = () => {
-      const firstProg =
-        sample.modules.find((m) => m.role === "program") ?? null;
-      if (firstProg)
-        loadModuleIntoEditor(
-          firstProg.moduleName,
-          firstProg.sourceText,
-          "program",
-        );
-      const firstPolicy =
-        sample.modules.find((m) => m.role === "policy") ?? null;
-      if (firstPolicy)
-        loadModuleIntoEditor(
-          firstPolicy.moduleName,
-          firstPolicy.sourceText,
-          "policy",
-        );
-      const firstTask = sample.tasks.at(0) ?? null;
-      if (firstTask) {
-        ($("taskTid") as HTMLInputElement).value = String(firstTask.tid);
-        ($("taskModule") as HTMLInputElement).value = firstTask.moduleName;
-      }
+      loadSampleIntoStudio(sample);
     };
 
     const runBtn = document.createElement("button");
     runBtn.className = "btn";
     runBtn.textContent = "Run";
     runBtn.onclick = () => {
-      void runSamples([sample]);
+      setSelectedSample(sample);
+      setView("home");
+      void runSamples([sample], getSuiteOptions());
     };
 
     actions.append(loadBtn, runBtn);
@@ -644,6 +1463,7 @@ function renderSampleCards() {
 
     sampleCardUiById.set(sample.id, {
       sample,
+      card,
       statusDot: dot,
       statusText,
       signalByKey,
@@ -658,6 +1478,8 @@ let sampleRunnerBusy = false;
 function setSampleRunnerBusy(busy: boolean) {
   ($("runAllSamples") as HTMLButtonElement).disabled = busy;
   ($("clearSampleResults") as HTMLButtonElement).disabled = busy;
+  loadSelectedSampleBtn.disabled = busy || selectedSample === null;
+  runSelectedSampleBtn.disabled = busy || selectedSample === null;
   for (const ui of sampleCardUiById.values()) {
     ui.runBtn.disabled = busy;
     ui.loadBtn.disabled = busy;
@@ -725,6 +1547,9 @@ const sampleRunnerApi = {
   async replayStop() {
     await sendCommand("replayStop");
   },
+  async reverseToTick(tick: number) {
+    await sendCommand("reverseToTick", { tick });
+  },
   async captureWhile<T>(fn: () => Promise<T>) {
     const events: DeosUiEvent[] = [];
     let consoleText = "";
@@ -742,7 +1567,114 @@ const sampleRunnerApi = {
   },
 };
 
-async function runSamples(list: SampleDefinition[]) {
+function getSuiteOptions(): {
+  mode: "quick" | "full";
+  stopOnFirstFail: boolean;
+} {
+  const mode: "quick" | "full" = suiteModeFullEl.checked ? "full" : "quick";
+  return { mode, stopOnFirstFail: stopOnFirstFailEl.checked };
+}
+
+type SuiteRunResult = {
+  suiteId: string;
+  runs: Array<{
+    sampleId: string;
+    runId: string;
+    status: "passed" | "failed" | "error";
+  }>;
+  passCount: number;
+  failCount: number;
+};
+
+let activeSuite: { suiteId: string; mode: "quick" | "full" } | null = null;
+
+function onSuiteProgress(ev: SuiteProgressEvent) {
+  if (!activeSuite || activeSuite.suiteId !== ev.suiteId) return;
+
+  const finishedCount = ev.passCount + ev.failCount;
+  const suiteDone = finishedCount >= ev.total;
+  const tone = suiteDone
+    ? ev.failCount > 0
+      ? "err"
+      : "ok"
+    : ev.failCount > 0
+      ? "err"
+      : "running";
+  setSamplesStatus(
+    `Suite: ${suiteDone ? "done" : "running"} ${String(finishedCount)}/${String(ev.total)} (PASS ${String(ev.passCount)} / FAIL ${String(ev.failCount)})`,
+    tone,
+  );
+
+  if (ev.status === "running") {
+    setSampleCardStatus(ev.sampleId, "running", "running…");
+    return;
+  }
+
+  setSampleCardStatus(
+    ev.sampleId,
+    ev.status === "passed" ? "ok" : "err",
+    ev.status,
+  );
+
+  const ui = sampleCardUiById.get(ev.sampleId);
+  if (!ui) return;
+  const ms = ev.durationMs ?? 0;
+  const ok = ev.status === "passed";
+  appendSampleResult(ui.sample, ms, ok, ev.summary ?? ev.status);
+}
+
+async function runSampleSuiteFromWorker(opts: {
+  mode: "quick" | "full";
+  stopOnFirstFail: boolean;
+}) {
+  if (sampleRunnerBusy) return;
+
+  sampleRunnerBusy = true;
+  setSampleRunnerBusy(true);
+  sampleResultsEl.textContent = "";
+  activeSuite = { suiteId: "deos-standard", mode: opts.mode };
+
+  try {
+    setView("home");
+    setSamplesStatus(
+      `Suite: running 0/${String(samples.length)} (PASS 0 / FAIL 0)`,
+      "running",
+    );
+    for (const ui of sampleCardUiById.values()) {
+      setSampleCardStatus(ui.sample.id, "idle", "idle");
+    }
+
+    const result = (await sendCommand("runSampleSuite", {
+      mode: opts.mode,
+      suiteId: "deos-standard",
+      stopOnFirstFail: opts.stopOnFirstFail,
+    })) as SuiteRunResult;
+
+    for (const r of result.runs) {
+      setSampleCardStatus(
+        r.sampleId,
+        r.status === "passed" ? "ok" : "err",
+        r.status,
+      );
+    }
+
+    setSamplesStatus(
+      `Suite: done (${opts.mode}) (PASS ${String(result.passCount)} / FAIL ${String(result.failCount)})`,
+      result.failCount > 0 ? "err" : "ok",
+    );
+  } catch (e: unknown) {
+    setSamplesStatus(`Suite: error ${String(e)}`, "err");
+  } finally {
+    activeSuite = null;
+    sampleRunnerBusy = false;
+    setSampleRunnerBusy(false);
+  }
+}
+
+async function runSamples(
+  list: SampleDefinition[],
+  opts: { mode: "quick" | "full"; stopOnFirstFail: boolean },
+) {
   if (sampleRunnerBusy) return;
 
   sampleRunnerBusy = true;
@@ -756,18 +1688,11 @@ async function runSamples(list: SampleDefinition[]) {
       `Samples: running 0/${String(list.length)} (PASS ${String(passCount)} / FAIL ${String(failCount)})`,
       "running",
     );
-    activateLeftTab("samples");
-    appendTimelineLine(
-      `=== samples: run ${String(list.length)} ===`,
-      undefined,
-      "meta",
-    );
+    setView("home");
 
     for (let i = 0; i < list.length; i++) {
       const sample = list[i];
       setSampleCardStatus(sample.id, "running", "running…");
-      appendTimelineLine(`--- sample: ${sample.title} ---`, undefined, "meta");
-      appendConsoleLine(`\n=== sample: ${sample.title} ===\n`);
 
       const runEvents: DeosUiEvent[] = [];
       const listener = (ev: DeosUiEvent) => {
@@ -800,10 +1725,12 @@ async function runSamples(list: SampleDefinition[]) {
           failCount > 0 ? "err" : "running",
         );
       }
+
+      if (opts.stopOnFirstFail && failCount > 0) break;
     }
 
     setSamplesStatus(
-      `Samples: done (PASS ${String(passCount)} / FAIL ${String(failCount)})`,
+      `Samples: done (${opts.mode}) (PASS ${String(passCount)} / FAIL ${String(failCount)})`,
       failCount > 0 ? "err" : "ok",
     );
   } finally {
@@ -814,20 +1741,34 @@ async function runSamples(list: SampleDefinition[]) {
 
 renderSampleCards();
 setSamplesStatus("Samples: ready", "ready");
+setSelectedSample(samples.at(0) ?? null);
+
+loadSelectedSampleBtn.onclick = () => {
+  const sample = selectedSample;
+  if (!sample) return;
+  loadSampleIntoStudio(sample);
+};
+runSelectedSampleBtn.onclick = () => {
+  const sample = selectedSample;
+  if (!sample) return;
+  void runSamples([sample], getSuiteOptions());
+};
 
 ($("runAllSamples") as HTMLButtonElement).onclick = () => {
-  void runSamples(samples);
+  void runSampleSuiteFromWorker(getSuiteOptions());
 };
 ($("clearSampleResults") as HTMLButtonElement).onclick = () => {
   sampleResultsEl.textContent = "";
-  for (const ui of sampleCardUiById.values())
+  for (const ui of sampleCardUiById.values()) {
     setSampleCardStatus(ui.sample.id, "idle", "idle");
+    setSampleSignalsFromEvents(ui.sample.id, []);
+  }
   setSamplesStatus("Samples: ready", "ready");
 };
 
 // Defaults
 const progSrcEl = $("progSrc") as HTMLTextAreaElement;
-progSrcEl.value = `// Example: timeslice switching (no yield)\n// 1) Compile as module 'progA' (prints 'A')\n// 2) Change 65 -> 66, set module 'progB' (prints 'B'), compile\n// 3) Create tasks: tid=1 module=progA, tid=2 module=progB\n// 4) Run to tick (e.g. 20) and watch taskSwitch reason=timeslice\n+\n+let burn = fun(n) => {\n+  if (n < 2000) { burn(n + 1) } else { 0 }\n+};\n+\n+let loop = fun(ch) => {\n+  burn(0);\n+  putc(ch);\n+  loop(ch)\n+};\n+\n+loop(65);\n`;
+progSrcEl.value = `// Example: timeslice switching (no yield)\n// 1) Compile as module 'progA' (prints 'A')\n// 2) Change 65 -> 66, set module 'progB' (prints 'B'), compile\n// 3) Create tasks: tid=1 module=progA, tid=2 module=progB\n// 4) Run to tick (e.g. 20) and watch taskSwitch reason=timeslice\n\nlet burn = fun(n) => {\n  if (n < 2000) { burn(n + 1) } else { 0 }\n};\n\nlet loop = fun(ch) => {\n  burn(0);\n  putc(ch);\n  loop(ch)\n};\n\nloop(65);\n`;
 
 const policySrcEl = $("policySrc") as HTMLTextAreaElement;
 policySrcEl.value = `// Policy must return a closure with arity 5.\n// Args: (nowTick, currentTid, currentIndex, runnableCount, domainId)\nlet pick = fun(nowTick, currentTid, currentIndex, runnableCount, domainId) => {\n  // reverse round-robin\n  (currentIndex + runnableCount - 1) % runnableCount\n};\n// Leave the closure as the program result:\npick;\n`;
@@ -900,7 +1841,7 @@ policySrcEl.value = `// Policy must return a closure with arity 5.\n// Args: (no
     appendTimelineLine(`reset error: ${JSON.stringify(e)}`);
   });
   consoleEl.textContent = "";
-  timelineEl.textContent = "";
+  clearStudioUiOnly();
   stateEl.textContent = "";
   traceInfoEl.textContent = "(trace info)";
   updateClock("0", 0);
@@ -1043,21 +1984,51 @@ policySrcEl.value = `// Policy must return a closure with arity 5.\n// Args: (no
 };
 
 // Right pane actions
-($("refreshState") as HTMLButtonElement).onclick = async () =>
-  refreshState("summary");
-($("refreshStateFull") as HTMLButtonElement).onclick = async () =>
-  refreshState("full");
-($("clearTimeline") as HTMLButtonElement).onclick = () =>
-  (timelineEl.textContent = "");
+($("refreshState") as HTMLButtonElement).onclick = async () => {
+  await refreshState("summary");
+};
+($("refreshStateFull") as HTMLButtonElement).onclick = async () => {
+  await refreshState("full");
+};
+($("clearTimeline") as HTMLButtonElement).onclick = () => {
+  clearStudioUiOnly();
+};
 
 // Console actions
-($("clearConsole") as HTMLButtonElement).onclick = () =>
-  (consoleEl.textContent = "");
+consoleTidEl.onchange = () => {
+  const v = consoleTidEl.value;
+  if (v === "all") {
+    consoleFilterTid = null;
+  } else {
+    const n = Number(v);
+    consoleFilterTid = Number.isFinite(n) ? n : null;
+  }
+  renderConsole();
+};
+
+copyConsoleBtn.onclick = async () => {
+  const text = consoleEl.textContent;
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    fallbackCopy(text);
+  }
+};
+
+($("clearConsole") as HTMLButtonElement).onclick = () => {
+  consoleStartIndex = studioEvents.length;
+  renderConsole();
+};
 
 // Keyboard input: ASCII only, ignore while typing in editors.
 window.addEventListener("keydown", (e) => {
   const target = e.target as HTMLElement | null;
-  if (target && (target.tagName === "TEXTAREA" || target.tagName === "INPUT"))
+  if (
+    target &&
+    (target.tagName === "TEXTAREA" ||
+      target.tagName === "INPUT" ||
+      target.tagName === "SELECT")
+  )
     return;
   if (e.key.length !== 1) return;
   const code = e.key.charCodeAt(0);

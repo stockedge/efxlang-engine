@@ -33,6 +33,7 @@ export type SampleRunnerApi = {
   loadTraceJsonText: (traceJsonText: string) => Promise<void>;
   replayStart: () => Promise<void>;
   replayStop: () => Promise<void>;
+  reverseToTick: (tick: number) => Promise<void>;
   captureWhile: <T>(
     fn: () => Promise<T>,
   ) => Promise<{ value: T; capture: SampleRunCapture }>;

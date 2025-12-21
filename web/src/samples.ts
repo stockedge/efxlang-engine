@@ -247,13 +247,13 @@ const S4_STATE_COUNTER: SampleDefinition = {
       role: "program",
       sourceText: `let withState = fun(s, thunk) =>
   handle thunk() with {
-    return(r) => r;
-    Get(x, k) => withState(s, fun() => k(s));
-    Put(newS, k) => withState(newS, fun() => k(null));
-  };
+    return(r) => fun(st) => r;
+    Get(k) => fun(st) => k(st)(st);
+    Put(newS, k) => fun(st) => k(null)(newS);
+  } (s);
 
 let inc = fun() => {
-  let n = perform Get(null);
+  let n = perform Get();
   perform Put(n + 1);
   n + 1
 };
@@ -329,12 +329,12 @@ const S6_TASKS_PINGPONG: SampleDefinition = {
     {
       moduleName: "s6a",
       role: "program",
-      sourceText: `{ print("A1"); yield(); print("A2"); yield(); print("A3"); exit(0) }\n`,
+      sourceText: `{ print("A1"); yield(); print("A2"); yield(); print("A3"); exit(0) };\n`,
     },
     {
       moduleName: "s6b",
       role: "program",
-      sourceText: `{ print("B1"); yield(); print("B2"); yield(); print("B3"); exit(0) }\n`,
+      sourceText: `{ print("B1"); yield(); print("B2"); yield(); print("B3"); exit(0) };\n`,
     },
   ],
   tasks: [
@@ -397,8 +397,12 @@ loop(10);
     {
       moduleName: "s7rr",
       role: "policy",
-      sourceText: `let pick = fun(_nowTick, _currentTid, currentIndex, runnableCount, _domainId) =>
-  (currentIndex + 1) % runnableCount;
+      sourceText: `let mod = fun(a, b) =>
+  if (a < b) { a } else { mod(a - b, b) };
+
+let pick = fun(_nowTick, _currentTid, currentIndex, runnableCount, _domainId) =>
+  mod(currentIndex + 1, runnableCount);
+
 pick;
 `,
     },
@@ -482,7 +486,7 @@ const S8_RECORD_REPLAY_INPUT: SampleDefinition = {
     {
       moduleName: "s8",
       role: "program",
-      sourceText: `{ let a = getc(); putc(a); let b = getc(); putc(b); let c = getc(); putc(c); exit(0) }\n`,
+      sourceText: `{ let a = getc(); putc(a); let b = getc(); putc(b); let c = getc(); putc(c); exit(0) };\n`,
     },
   ],
   tasks: [{ tid: 1, moduleName: "s8" }],

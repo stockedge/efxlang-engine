@@ -686,6 +686,7 @@ export class DeosEngine {
 
   private runVmToHalt(vm: VM, maxSteps: number): Value {
     for (let steps = 0; steps < maxSteps; steps++) {
+      if (vm.fiber.callStack.length === 0) return vm.lastPoppedValue ?? null;
       const res = vm.step();
       if (res.status === VMStatus.HALTED) return res.value ?? null;
       if (res.status === VMStatus.SAFEPOINT) continue;

@@ -891,6 +891,7 @@ function renderTimelineSvg() {
         y1: "0",
         x2: String(x),
         y2: String(height),
+        "pointer-events": "none",
         stroke: "rgba(31,111,235,0.85)",
         "stroke-width": "2",
       }),

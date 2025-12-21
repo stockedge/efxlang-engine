@@ -6,6 +6,11 @@ import {
   PROTOCOL_VERSION,
   type WorkerMessage,
 } from "./protocol";
+import {
+  type SampleDefinition,
+  type SampleRunnerConfig,
+  samples,
+} from "./samples";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("#app not found");
@@ -20,6 +25,11 @@ app.innerHTML = `
       </div>
 
       <div class="toolbar">
+        <div class="group">
+          <button class="btn" id="runAllSamples">Run All Samples</button>
+          <span class="pill mono" id="samplesStatus">Samples: ready</span>
+        </div>
+
         <div class="group">
           <button class="btn" id="run">Run</button>
           <button class="btn secondary" id="pause">Pause</button>
@@ -55,6 +65,7 @@ app.innerHTML = `
         <div class="tabs">
           <button class="tab active" data-tab="prog">Program</button>
           <button class="tab" data-tab="policy">Scheduler Policy</button>
+          <button class="tab" data-tab="samples">Samples</button>
         </div>
 
         <div class="tabpanel active" id="tab-prog">
@@ -84,6 +95,17 @@ app.innerHTML = `
               <button class="btn secondary" id="clearPolicy">Clear Policy</button>
             </div>
             <textarea class="textarea mono" id="policySrc"></textarea>
+          </div>
+        </div>
+
+        <div class="tabpanel" id="tab-samples">
+          <div class="panel">
+            <div class="row">
+              <span class="mono">Click a sample to load/run.</span>
+              <button class="btn secondary" id="clearSampleResults">Clear Results</button>
+            </div>
+            <div class="cards" id="sampleCards"></div>
+            <div class="sample-results mono" id="sampleResults"></div>
           </div>
         </div>
       </div>
@@ -140,11 +162,14 @@ function $(id: string): HTMLElement {
 }
 
 const statusEl = $("status") as HTMLSpanElement;
+const samplesStatusEl = $("samplesStatus") as HTMLSpanElement;
 const clockEl = $("clock") as HTMLSpanElement;
 const consoleEl = $("console") as HTMLDivElement;
 const timelineEl = $("timeline") as HTMLDivElement;
 const stateEl = $("state") as HTMLPreElement;
 const traceInfoEl = $("traceInfo") as HTMLPreElement;
+const sampleCardsEl = $("sampleCards") as HTMLDivElement;
+const sampleResultsEl = $("sampleResults") as HTMLDivElement;
 
 const followTickEl = $("followTick") as HTMLInputElement;
 const autoScrollEl = $("autoScroll") as HTMLInputElement;
@@ -160,6 +185,8 @@ const pending = new Map<
   string,
   { resolve: (v: unknown) => void; reject: (e: unknown) => void }
 >();
+
+const engineEventSubscribers = new Set<(ev: DeosUiEvent) => void>();
 
 worker.onmessage = (ev: MessageEvent<WorkerMessage>) => {
   const msg = ev.data;
@@ -211,9 +238,9 @@ function appendConsoleLine(text: string) {
   if (autoScrollEl.checked) consoleEl.scrollTop = consoleEl.scrollHeight;
 }
 
-function appendTimelineLine(line: string, tick?: number) {
+function appendTimelineLine(line: string, tick?: number, kind?: string) {
   const div = document.createElement("div");
-  div.className = "timeline-row";
+  div.className = kind ? `timeline-row kind-${kind}` : "timeline-row";
   div.textContent = line;
   if (typeof tick === "number") {
     div.dataset.tick = String(tick);
@@ -227,6 +254,8 @@ function appendTimelineLine(line: string, tick?: number) {
 }
 
 function onEngineEvent(ev: DeosUiEvent) {
+  for (const cb of engineEventSubscribers) cb(ev);
+
   if ("cycle" in ev && "tick" in ev) updateClock(ev.cycle, ev.tick);
 
   if (ev.type === "console") {
@@ -239,6 +268,7 @@ function onEngineEvent(ev: DeosUiEvent) {
       appendTimelineLine(
         `tick ${String(ev.tick)} @${formatCycleShort(ev.cycle)}`,
         ev.tick,
+        ev.type,
       );
       return;
     case "taskSwitch":
@@ -247,6 +277,7 @@ function onEngineEvent(ev: DeosUiEvent) {
           ev.cycle,
         )}`,
         ev.tick,
+        ev.type,
       );
       return;
     case "perform":
@@ -255,6 +286,7 @@ function onEngineEvent(ev: DeosUiEvent) {
           ev.cycle,
         )}`,
         ev.tick,
+        ev.type,
       );
       return;
     case "contCall":
@@ -263,12 +295,14 @@ function onEngineEvent(ev: DeosUiEvent) {
           ev.cycle,
         )}`,
         ev.tick,
+        ev.type,
       );
       return;
     case "contReturn":
       appendTimelineLine(
         `contReturn tid=${String(ev.tid)} tick=${String(ev.tick)} @${formatCycleShort(ev.cycle)}`,
         ev.tick,
+        ev.type,
       );
       return;
     case "inputConsumed":
@@ -277,6 +311,7 @@ function onEngineEvent(ev: DeosUiEvent) {
           ev.cycle,
         )}`,
         ev.tick,
+        ev.type,
       );
       return;
     case "policyPick":
@@ -285,12 +320,14 @@ function onEngineEvent(ev: DeosUiEvent) {
           ",",
         )}] tick=${String(ev.tick)} @${formatCycleShort(ev.cycle)}`,
         ev.tick,
+        ev.type,
       );
       return;
     case "error":
       appendTimelineLine(
         `error ${ev.code}: ${ev.message} tick=${String(ev.tick)} @${formatCycleShort(ev.cycle)}`,
         ev.tick,
+        ev.type,
       );
       return;
   }
@@ -353,6 +390,440 @@ function bindRightTabs() {
 
 bindLeftTabs();
 bindRightTabs();
+
+const DEFAULT_ENGINE_CONFIG: SampleRunnerConfig = {
+  cyclesPerTick: 10_000,
+  timesliceTicks: 1,
+  snapshotEveryTicks: 100,
+  eventMask:
+    EventMask.Console |
+    EventMask.Tick |
+    EventMask.TaskSwitch |
+    EventMask.Perform |
+    EventMask.Continuation |
+    EventMask.InputConsumed |
+    EventMask.PolicyPick |
+    EventMask.Error,
+};
+
+type SampleCardUi = {
+  sample: SampleDefinition;
+  statusDot: HTMLSpanElement;
+  statusText: HTMLSpanElement;
+  signalByKey: Map<string, HTMLSpanElement>;
+  runBtn: HTMLButtonElement;
+  loadBtn: HTMLButtonElement;
+};
+
+const sampleCardUiById = new Map<string, SampleCardUi>();
+
+function setSamplesStatus(
+  text: string,
+  tone: "ready" | "running" | "ok" | "err" = "ready",
+) {
+  samplesStatusEl.textContent = text;
+  samplesStatusEl.dataset.tone = tone;
+}
+
+function setSampleCardStatus(
+  sampleId: string,
+  state: "idle" | "running" | "ok" | "err",
+  text: string,
+) {
+  const ui = sampleCardUiById.get(sampleId);
+  if (!ui) return;
+  ui.statusDot.dataset.state = state;
+  ui.statusText.textContent = text;
+}
+
+function appendSampleResult(
+  sample: SampleDefinition,
+  ms: number,
+  ok: boolean,
+  summary: string,
+  details?: string,
+) {
+  const root = document.createElement("details");
+  root.className = ok ? "result ok" : "result err";
+  root.open = !ok;
+
+  const s = document.createElement("summary");
+  const tag = ok ? "OK" : "FAIL";
+  s.textContent = `${tag} ${sample.title} (${String(Math.round(ms))}ms) - ${summary}`;
+  root.appendChild(s);
+
+  if (details) {
+    const pre = document.createElement("pre");
+    pre.className = "result-details mono";
+    pre.textContent = details;
+    root.appendChild(pre);
+  }
+
+  sampleResultsEl.appendChild(root);
+}
+
+function activateLeftTab(key: string) {
+  const root = $("left") as HTMLDivElement;
+  const btn = root.querySelector<HTMLButtonElement>(`.tab[data-tab="${key}"]`);
+  btn?.click();
+}
+
+function loadModuleIntoEditor(
+  moduleName: string,
+  sourceText: string,
+  role: "program" | "policy",
+) {
+  if (role === "program") {
+    ($("progModule") as HTMLInputElement).value = moduleName;
+    ($("progSrc") as HTMLTextAreaElement).value = sourceText;
+    activateLeftTab("prog");
+    return;
+  }
+  ($("policyModule") as HTMLInputElement).value = moduleName;
+  ($("policySrc") as HTMLTextAreaElement).value = sourceText;
+  activateLeftTab("policy");
+}
+
+function setSampleSignal(sampleId: string, key: string, on: boolean) {
+  const ui = sampleCardUiById.get(sampleId);
+  if (!ui) return;
+  const el = ui.signalByKey.get(key);
+  if (!el) return;
+  el.dataset.state = on ? "on" : "off";
+}
+
+function setSampleSignalsFromEvents(sampleId: string, events: DeosUiEvent[]) {
+  setSampleSignal(
+    sampleId,
+    "task",
+    events.some((e) => e.type === "taskSwitch"),
+  );
+  setSampleSignal(
+    sampleId,
+    "perform",
+    events.some((e) => e.type === "perform"),
+  );
+  setSampleSignal(
+    sampleId,
+    "policy",
+    events.some((e) => e.type === "policyPick"),
+  );
+  setSampleSignal(
+    sampleId,
+    "input",
+    events.some((e) => e.type === "inputConsumed"),
+  );
+  setSampleSignal(
+    sampleId,
+    "error",
+    events.some((e) => e.type === "error"),
+  );
+}
+
+function renderSampleCards() {
+  sampleCardsEl.textContent = "";
+  sampleCardUiById.clear();
+
+  for (const sample of samples) {
+    const card = document.createElement("div");
+    card.className = "card";
+
+    const header = document.createElement("div");
+    header.className = "card-header";
+
+    const title = document.createElement("div");
+    title.className = "card-title";
+    title.textContent = sample.title;
+
+    const status = document.createElement("div");
+    status.className = "card-status";
+    const dot = document.createElement("span");
+    dot.className = "status-dot";
+    dot.dataset.state = "idle";
+    const statusText = document.createElement("span");
+    statusText.className = "mono";
+    statusText.textContent = "idle";
+    status.append(dot, statusText);
+
+    header.append(title, status);
+
+    const desc = document.createElement("div");
+    desc.className = "card-desc";
+    desc.textContent = sample.description;
+
+    const tags = document.createElement("div");
+    tags.className = "badges";
+    for (const t of sample.tags) {
+      const b = document.createElement("span");
+      b.className = "badge";
+      b.textContent = t;
+      tags.appendChild(b);
+    }
+
+    const meta = document.createElement("div");
+    meta.className = "card-meta mono";
+    meta.textContent = `tasks: ${sample.tasks.map((t) => `${String(t.tid)}->${t.moduleName}`).join(", ")}`;
+
+    const signals = document.createElement("div");
+    signals.className = "signals";
+
+    const signalByKey = new Map<string, HTMLSpanElement>();
+    const defs: Array<{ key: string; label: string; title: string }> = [
+      { key: "task", label: "TS", title: "taskSwitch" },
+      { key: "perform", label: "PF", title: "perform" },
+      { key: "policy", label: "PL", title: "policyPick" },
+      { key: "input", label: "IN", title: "inputConsumed" },
+      { key: "error", label: "ER", title: "error" },
+    ];
+    for (const d of defs) {
+      const el = document.createElement("span");
+      el.className = "signal mono";
+      el.dataset.key = d.key;
+      el.dataset.state = "off";
+      el.title = d.title;
+      el.textContent = d.label;
+      signalByKey.set(d.key, el);
+      signals.appendChild(el);
+    }
+
+    const modules = document.createElement("div");
+    modules.className = "modules";
+
+    for (const m of sample.modules) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "module-chip mono";
+      btn.textContent = `${m.moduleName}${m.role === "policy" ? " (policy)" : ""}`;
+      btn.onclick = () => {
+        loadModuleIntoEditor(m.moduleName, m.sourceText, m.role);
+      };
+      modules.appendChild(btn);
+    }
+
+    const actions = document.createElement("div");
+    actions.className = "row";
+
+    const loadBtn = document.createElement("button");
+    loadBtn.className = "btn secondary";
+    loadBtn.textContent = "Load";
+    loadBtn.onclick = () => {
+      const firstProg =
+        sample.modules.find((m) => m.role === "program") ?? null;
+      if (firstProg)
+        loadModuleIntoEditor(
+          firstProg.moduleName,
+          firstProg.sourceText,
+          "program",
+        );
+      const firstPolicy =
+        sample.modules.find((m) => m.role === "policy") ?? null;
+      if (firstPolicy)
+        loadModuleIntoEditor(
+          firstPolicy.moduleName,
+          firstPolicy.sourceText,
+          "policy",
+        );
+      const firstTask = sample.tasks.at(0) ?? null;
+      if (firstTask) {
+        ($("taskTid") as HTMLInputElement).value = String(firstTask.tid);
+        ($("taskModule") as HTMLInputElement).value = firstTask.moduleName;
+      }
+    };
+
+    const runBtn = document.createElement("button");
+    runBtn.className = "btn";
+    runBtn.textContent = "Run";
+    runBtn.onclick = () => {
+      void runSamples([sample]);
+    };
+
+    actions.append(loadBtn, runBtn);
+
+    card.append(header, desc, tags, meta, signals, modules, actions);
+    sampleCardsEl.appendChild(card);
+
+    sampleCardUiById.set(sample.id, {
+      sample,
+      statusDot: dot,
+      statusText,
+      signalByKey,
+      runBtn,
+      loadBtn,
+    });
+  }
+}
+
+let sampleRunnerBusy = false;
+
+function setSampleRunnerBusy(busy: boolean) {
+  ($("runAllSamples") as HTMLButtonElement).disabled = busy;
+  ($("clearSampleResults") as HTMLButtonElement).disabled = busy;
+  for (const ui of sampleCardUiById.values()) {
+    ui.runBtn.disabled = busy;
+    ui.loadBtn.disabled = busy;
+  }
+}
+
+const sampleRunnerApi = {
+  async reset() {
+    await sendCommand("reset");
+  },
+  async init(cfg?: Partial<SampleRunnerConfig>) {
+    const merged = { ...DEFAULT_ENGINE_CONFIG, ...(cfg ?? {}) };
+    await sendCommand("init", merged);
+  },
+  async compileAndLoad(moduleName: string, sourceText: string) {
+    const payload = (await sendCommand("compile", {
+      sourceName: `${moduleName}.efx`,
+      sourceText,
+    })) as { tbc?: ArrayBuffer };
+    const tbc = payload.tbc;
+    if (!tbc) throw new Error("compile returned no tbc");
+    await sendCommand("loadModule", { moduleName, tbc });
+  },
+  async createTask(
+    tid: number,
+    moduleName: string,
+    entryFnIndex?: number,
+    domainId?: number,
+  ) {
+    const payload: Record<string, unknown> = { tid, moduleName };
+    if (entryFnIndex !== undefined) payload.entryFnIndex = entryFnIndex;
+    if (domainId !== undefined) payload.domainId = domainId;
+    await sendCommand("createTask", payload);
+  },
+  async setSchedulerPolicy(moduleName: string | null) {
+    await sendCommand("setSchedulerPolicy", { moduleName });
+  },
+  async inputKbd(byte: number, isDown: boolean) {
+    await sendCommand("inputKbd", { byte, isDown });
+  },
+  async run(opts?: { untilTick?: number; maxInstructions?: number }) {
+    await sendCommand("run", {
+      ...(opts?.untilTick !== undefined ? { untilTick: opts.untilTick } : {}),
+      maxInstructions: opts?.maxInstructions ?? 5_000_000,
+    });
+  },
+  async recordStart() {
+    await sendCommand("recordStart");
+  },
+  async recordStop() {
+    await sendCommand("recordStop");
+  },
+  async getTraceJsonText() {
+    const payload = (await sendCommand("getTrace")) as {
+      traceJsonText?: string;
+    };
+    return payload.traceJsonText ?? "";
+  },
+  async loadTraceJsonText(traceJsonText: string) {
+    await sendCommand("loadTrace", { traceJsonText });
+  },
+  async replayStart() {
+    await sendCommand("replayStart");
+  },
+  async replayStop() {
+    await sendCommand("replayStop");
+  },
+  async captureWhile<T>(fn: () => Promise<T>) {
+    const events: DeosUiEvent[] = [];
+    let consoleText = "";
+    const listener = (ev: DeosUiEvent) => {
+      events.push(ev);
+      if (ev.type === "console") consoleText += ev.text;
+    };
+    engineEventSubscribers.add(listener);
+    try {
+      const value = await fn();
+      return { value, capture: { consoleText, events } };
+    } finally {
+      engineEventSubscribers.delete(listener);
+    }
+  },
+};
+
+async function runSamples(list: SampleDefinition[]) {
+  if (sampleRunnerBusy) return;
+
+  sampleRunnerBusy = true;
+  setSampleRunnerBusy(true);
+  sampleResultsEl.textContent = "";
+
+  try {
+    let passCount = 0;
+    let failCount = 0;
+    setSamplesStatus(
+      `Samples: running 0/${String(list.length)} (PASS ${String(passCount)} / FAIL ${String(failCount)})`,
+      "running",
+    );
+    activateLeftTab("samples");
+    appendTimelineLine(
+      `=== samples: run ${String(list.length)} ===`,
+      undefined,
+      "meta",
+    );
+
+    for (let i = 0; i < list.length; i++) {
+      const sample = list[i];
+      setSampleCardStatus(sample.id, "running", "running…");
+      appendTimelineLine(`--- sample: ${sample.title} ---`, undefined, "meta");
+      appendConsoleLine(`\n=== sample: ${sample.title} ===\n`);
+
+      const runEvents: DeosUiEvent[] = [];
+      const listener = (ev: DeosUiEvent) => {
+        runEvents.push(ev);
+      };
+      engineEventSubscribers.add(listener);
+
+      const t0 = performance.now();
+      try {
+        const res = await sample.run(sampleRunnerApi);
+        const ms = performance.now() - t0;
+        if (res.ok) passCount += 1;
+        else failCount += 1;
+        setSampleCardStatus(
+          sample.id,
+          res.ok ? "ok" : "err",
+          res.ok ? "ok" : "failed",
+        );
+        appendSampleResult(sample, ms, res.ok, res.summary, res.details);
+      } catch (e: unknown) {
+        const ms = performance.now() - t0;
+        failCount += 1;
+        setSampleCardStatus(sample.id, "err", "failed");
+        appendSampleResult(sample, ms, false, "exception", JSON.stringify(e));
+      } finally {
+        engineEventSubscribers.delete(listener);
+        setSampleSignalsFromEvents(sample.id, runEvents);
+        setSamplesStatus(
+          `Samples: running ${String(i + 1)}/${String(list.length)} (PASS ${String(passCount)} / FAIL ${String(failCount)})`,
+          failCount > 0 ? "err" : "running",
+        );
+      }
+    }
+
+    setSamplesStatus(
+      `Samples: done (PASS ${String(passCount)} / FAIL ${String(failCount)})`,
+      failCount > 0 ? "err" : "ok",
+    );
+  } finally {
+    sampleRunnerBusy = false;
+    setSampleRunnerBusy(false);
+  }
+}
+
+renderSampleCards();
+setSamplesStatus("Samples: ready", "ready");
+
+($("runAllSamples") as HTMLButtonElement).onclick = () => {
+  void runSamples(samples);
+};
+($("clearSampleResults") as HTMLButtonElement).onclick = () => {
+  sampleResultsEl.textContent = "";
+  for (const ui of sampleCardUiById.values())
+    setSampleCardStatus(ui.sample.id, "idle", "idle");
+  setSamplesStatus("Samples: ready", "ready");
+};
 
 // Defaults
 const progSrcEl = $("progSrc") as HTMLTextAreaElement;

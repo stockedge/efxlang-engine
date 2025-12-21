@@ -1,8 +1,9 @@
+import * as assert from "assert";
+
+import { type Task, TaskState } from "../src/kernel/task";
 import { StateSerializer } from "../src/trace/snapshot";
 import { Env } from "../src/vm/env";
 import { Fiber } from "../src/vm/fiber";
-import { type Task, TaskState } from "../src/kernel/task";
-import * as assert from "assert";
 
 function testSnapshot() {
   console.log("Running Snapshot tests...");

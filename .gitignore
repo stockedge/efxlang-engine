@@ -6,6 +6,8 @@ dist/
 dist-web/
 out/
 build/
+web/public/*.wasm
+web/public/*.wat
 
 # Logs
 *.log

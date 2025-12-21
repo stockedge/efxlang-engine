@@ -1,10 +1,11 @@
+import * as assert from "assert";
+
+import { TBCEncoder } from "../src/bytecode/bin";
+import { type ImageFormat, Kernel } from "../src/kernel/kernel";
+import { Codegen } from "../src/lang/codegen";
 import { Lexer } from "../src/lang/lexer";
 import { Parser } from "../src/lang/parser";
 import { Resolver } from "../src/lang/resolver";
-import { Codegen } from "../src/lang/codegen";
-import { TBCEncoder } from "../src/bytecode/bin";
-import { Kernel, type ImageFormat } from "../src/kernel/kernel";
-import * as assert from "assert";
 
 function testImage() {
   console.log("Running Image loading tests...");

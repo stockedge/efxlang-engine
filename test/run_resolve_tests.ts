@@ -1,8 +1,9 @@
+import * as assert from "assert";
+
+import { type FunExpr, type LetStmt, type VarExpr } from "../src/lang/ast";
 import { Lexer } from "../src/lang/lexer";
 import { Parser } from "../src/lang/parser";
 import { Resolver } from "../src/lang/resolver";
-import { type LetStmt, type FunExpr, type VarExpr } from "../src/lang/ast";
-import * as assert from "assert";
 
 function testResolver() {
   console.log("Running Resolver tests...");

@@ -1,13 +1,13 @@
 import {
-  type Program,
-  type Stmt,
-  type Expr,
-  type LetStmt,
   type BlockExpr,
-  type VarExpr,
+  type Expr,
   type FunExpr,
-  type ReturnClause,
+  type LetStmt,
   type OpClause,
+  type Program,
+  type ReturnClause,
+  type Stmt,
+  type VarExpr,
 } from "./ast";
 import { type Token } from "./token";
 

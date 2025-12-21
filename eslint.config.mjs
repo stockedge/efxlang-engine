@@ -1,10 +1,18 @@
 import tseslint from "typescript-eslint";
 import prettierConfig from "eslint-config-prettier";
+import simpleImportSort from "eslint-plugin-simple-import-sort";
 
 const tsFiles = ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts"];
 
+/** @type {import("eslint").Linter.FlatConfig["plugins"]} */
+const strongPlugins = {
+  "simple-import-sort": simpleImportSort,
+};
+
 /** @type {import("eslint").Linter.RulesRecord} */
 const strongRules = {
+  "simple-import-sort/imports": "error",
+  "simple-import-sort/exports": "error",
   "@typescript-eslint/no-unused-vars": [
     "error",
     {
@@ -28,9 +36,13 @@ export default tseslint.config(
       "dist/**",
       "dist-web/**",
       "coverage/**",
+      "wasm/**",
       "node_modules/**",
       "vm_log.txt",
     ],
+  },
+  {
+    linterOptions: { reportUnusedDisableDirectives: true },
   },
 
   // Apply TypeScript rules only to TS files (avoid linting generated JS).
@@ -42,6 +54,7 @@ export default tseslint.config(
 
   {
     files: ["src/**/*.ts", "test/**/*.ts", "vite.browser.config.ts"],
+    plugins: strongPlugins,
     languageOptions: {
       parserOptions: {
         project: "./tsconfig.json",
@@ -51,6 +64,7 @@ export default tseslint.config(
   },
   {
     files: ["web/**/*.ts"],
+    plugins: strongPlugins,
     languageOptions: {
       parserOptions: {
         project: "./web/tsconfig.json",

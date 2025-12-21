@@ -1,9 +1,10 @@
+import * as assert from "assert";
+
+import { TBCDecoder, TBCEncoder } from "../src/bytecode/bin";
+import { Codegen } from "../src/lang/codegen";
 import { Lexer } from "../src/lang/lexer";
 import { Parser } from "../src/lang/parser";
 import { Resolver } from "../src/lang/resolver";
-import { Codegen } from "../src/lang/codegen";
-import { TBCEncoder, TBCDecoder } from "../src/bytecode/bin";
-import * as assert from "assert";
 
 function testBin() {
   console.log("Running Binary TBC tests...");

@@ -1,10 +1,11 @@
 import { readFileSync, writeFileSync } from "fs";
+
+import { TBCEncoder } from "../bytecode/bin";
+import { type ImageFormat, Kernel } from "../kernel/kernel";
+import { Codegen } from "../lang/codegen";
 import { Lexer } from "../lang/lexer";
 import { Parser } from "../lang/parser";
 import { Resolver } from "../lang/resolver";
-import { Codegen } from "../lang/codegen";
-import { TBCEncoder } from "../bytecode/bin";
-import { Kernel, type ImageFormat } from "../kernel/kernel";
 import { parseTraceFile } from "../trace/trace";
 
 function main() {

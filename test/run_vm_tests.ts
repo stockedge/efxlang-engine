@@ -1,10 +1,11 @@
+import * as assert from "assert";
+
+import { Codegen } from "../src/lang/codegen";
 import { Lexer } from "../src/lang/lexer";
 import { Parser } from "../src/lang/parser";
 import { Resolver } from "../src/lang/resolver";
-import { Codegen } from "../src/lang/codegen";
-import { VM } from "../src/vm/vm";
 import { VMStatus } from "../src/vm/status";
-import * as assert from "assert";
+import { VM } from "../src/vm/vm";
 
 function testVM() {
   console.log("Running VM tests...");

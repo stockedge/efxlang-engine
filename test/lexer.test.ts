@@ -1,4 +1,5 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
+
 import { Lexer } from "../src/lang/lexer";
 import { TokenType } from "../src/lang/token";
 

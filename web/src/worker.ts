@@ -1,17 +1,18 @@
+import { TBCEncoder } from "@core/bytecode/bin";
+import { Codegen } from "@core/lang/codegen";
 import { Lexer } from "@core/lang/lexer";
 import { Parser } from "@core/lang/parser";
 import { Resolver } from "@core/lang/resolver";
-import { Codegen } from "@core/lang/codegen";
-import { TBCEncoder } from "@core/bytecode/bin";
-import { DeosEngine } from "./engine/deos_engine";
+
 import { base64ToBytes, bytesToBase64 } from "./engine/base64";
+import { createEngine, type Engine } from "./engine/engine_factory";
 import type { DeosTraceV1 } from "./engine/trace_format";
 import {
+  type CommandMessage,
+  type DeosUiEvent,
   EventMask,
   isCommandMessage,
   PROTOCOL_VERSION,
-  type CommandMessage,
-  type DeosUiEvent,
   type RespCompileOk,
   type RespErr,
   type RespOk,
@@ -43,7 +44,8 @@ function respErr(
   };
 }
 
-const engine = new DeosEngine();
+const enginePromise: Promise<Engine> = createEngine();
+let lastClock = { tick: 0, cycle: "0" };
 
 const moduleBytesByName = new Map<string, Uint8Array>();
 const tasksByTid = new Map<
@@ -82,17 +84,18 @@ function postUiEvent(event: DeosUiEvent) {
   self.postMessage(msg);
 }
 
-function flushEngineEvents() {
+function flushEngineEvents(engine: Engine) {
   for (;;) {
     const json = engine.pollEventJson();
     if (!json) break;
     const ev = JSON.parse(json) as DeosUiEvent;
+    lastClock = { tick: ev.tick, cycle: ev.cycle };
     postUiEvent(ev);
-    if (activeTrace) maybeRecordEvent(ev);
+    if (activeTrace) maybeRecordEvent(engine, ev);
   }
 }
 
-function takeSnapshotForTrace() {
+function takeSnapshotForTrace(engine: Engine) {
   if (!activeTrace) return;
   const snapshotJson = engine.exportSnapshotJson();
   const parsed = JSON.parse(snapshotJson) as {
@@ -108,7 +111,7 @@ function takeSnapshotForTrace() {
   lastSnapshotTick = tick;
 }
 
-function maybeRecordEvent(ev: DeosUiEvent) {
+function maybeRecordEvent(engine: Engine, ev: DeosUiEvent) {
   if (!activeTrace) return;
   if (ev.type === "inputConsumed") activeTrace.events.push(ev);
   if (ev.type === "console") activeTrace.output.push(ev);
@@ -116,7 +119,7 @@ function maybeRecordEvent(ev: DeosUiEvent) {
   if (ev.type === "tick") {
     lastSnapshotTick ??= ev.tick;
     if (ev.tick - lastSnapshotTick >= activeTrace.config.snapshotEveryTicks) {
-      takeSnapshotForTrace();
+      takeSnapshotForTrace(engine);
     }
   }
 }
@@ -129,25 +132,24 @@ function compileToTbcBytes(sourceText: string): Uint8Array {
   return new TBCEncoder().encode(tbc);
 }
 
-async function runBatched(opts: {
-  untilTick?: number;
-  maxInstructions?: number;
-}) {
+async function runBatched(
+  engine: Engine,
+  opts: {
+    untilTick?: number;
+    maxInstructions?: number;
+  },
+) {
   const maxInstructions = opts.maxInstructions ?? 5_000_000;
   let remaining = Math.max(0, Math.floor(maxInstructions));
 
   while (!engine.getPaused()) {
-    if (
-      opts.untilTick !== undefined &&
-      engine.getClock().tick >= opts.untilTick
-    )
-      break;
+    if (opts.untilTick !== undefined && lastClock.tick >= opts.untilTick) break;
     if (remaining <= 0) return { hitMaxInstructions: true };
 
     const batch = Math.min(50_000, remaining);
     const executed = engine.step(batch);
     remaining -= executed;
-    flushEngineEvents();
+    flushEngineEvents(engine);
 
     if (executed === 0) break;
     // Yield to allow pause/message handling.
@@ -172,6 +174,8 @@ async function handleCommand(
     };
   }
 
+  const engine = await enginePromise;
+
   switch (msg.command) {
     case "init":
       try {
@@ -187,6 +191,7 @@ async function handleCommand(
           msg.payload.snapshotEveryTicks,
           msg.payload.eventMask,
         );
+        lastClock = { tick: 0, cycle: "0" };
         return respOk(requestId);
       } catch (e) {
         return respErr(requestId, "EngineError", "init failed", e);
@@ -302,10 +307,10 @@ async function handleCommand(
       try {
         engine.setPaused(false);
         const executed = engine.step(msg.payload.instructions);
-        flushEngineEvents();
+        flushEngineEvents(engine);
         return respOk(requestId, { executed });
       } catch (e) {
-        flushEngineEvents();
+        flushEngineEvents(engine);
         return respErr(requestId, "EngineError", "step failed", e);
       }
     }
@@ -314,14 +319,14 @@ async function handleCommand(
       try {
         isRunning = true;
         engine.setPaused(false);
-        const result = await runBatched({
+        const result = await runBatched(engine, {
           untilTick: msg.payload.untilTick,
           maxInstructions: msg.payload.maxInstructions,
         });
-        flushEngineEvents();
+        flushEngineEvents(engine);
         return respOk(requestId, result);
       } catch (e) {
-        flushEngineEvents();
+        flushEngineEvents(engine);
         return respErr(requestId, "EngineError", "run failed", e);
       } finally {
         isRunning = false;
@@ -329,11 +334,12 @@ async function handleCommand(
     }
     case "pause": {
       engine.setPaused(true);
-      flushEngineEvents();
+      flushEngineEvents(engine);
       return respOk(requestId);
     }
     case "reset":
       engine.reset();
+      lastClock = { tick: 0, cycle: "0" };
       moduleBytesByName.clear();
       tasksByTid.clear();
       schedulerPolicyModuleName = null;
@@ -355,7 +361,7 @@ async function handleCommand(
           EventMask.PolicyPick |
           EventMask.Error,
       };
-      flushEngineEvents();
+      flushEngineEvents(engine);
       return respOk(requestId);
     case "recordStart": {
       try {
@@ -376,7 +382,7 @@ async function handleCommand(
           snapshots: [],
         };
         lastSnapshotTick = null;
-        takeSnapshotForTrace();
+        takeSnapshotForTrace(engine);
         return respOk(requestId);
       } catch (e) {
         activeTrace = null;
@@ -385,7 +391,7 @@ async function handleCommand(
     }
     case "recordStop": {
       engine.recordStop();
-      flushEngineEvents();
+      flushEngineEvents(engine);
       return respOk(requestId);
     }
     case "getTrace": {
@@ -450,16 +456,16 @@ async function handleCommand(
           engine.scheduleKbd(at, ev.byte, ev.isDown);
         }
 
-        flushEngineEvents();
+        flushEngineEvents(engine);
         return respOk(requestId);
       } catch (e) {
-        flushEngineEvents();
+        flushEngineEvents(engine);
         return respErr(requestId, "ReplayError", "replayStart failed", e);
       }
     }
     case "replayStop": {
       engine.replayStop();
-      flushEngineEvents();
+      flushEngineEvents(engine);
       return respOk(requestId);
     }
     case "reverseToTick": {
@@ -505,10 +511,10 @@ async function handleCommand(
         engine.runUntilTick(targetTick, 5_000_000);
         engine.setPaused(true);
 
-        flushEngineEvents();
+        flushEngineEvents(engine);
         return respOk(requestId);
       } catch (e) {
-        flushEngineEvents();
+        flushEngineEvents(engine);
         return respErr(requestId, "EngineError", "reverseToTick failed", e);
       }
     }

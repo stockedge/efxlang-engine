@@ -1,18 +1,19 @@
-import { SyscallType } from "@core/bytecode/opcode";
 import { TBCDecoder, TBCEncoder } from "@core/bytecode/bin";
+import { SyscallType } from "@core/bytecode/opcode";
+import { type Task, TaskState } from "@core/kernel/task";
 import type { TBCFile } from "@core/lang/codegen";
+import { StateDeserializer, StateSerializer } from "@core/trace/snapshot";
 import { Env } from "@core/vm/env";
 import { Fiber } from "@core/vm/fiber";
+import { type VMResult, VMStatus } from "@core/vm/status";
 import type { Closure, Value } from "@core/vm/value";
 import { VM } from "@core/vm/vm";
-import { VMStatus, type VMResult } from "@core/vm/status";
-import { TaskState, type Task } from "@core/kernel/task";
-import { StateDeserializer, StateSerializer } from "@core/trace/snapshot";
+
 import {
-  EventMask,
-  PROTOCOL_VERSION,
   type DeosUiEvent,
   type Diagnostics,
+  EventMask,
+  PROTOCOL_VERSION,
 } from "../protocol";
 
 type EngineMode = "normal" | "record" | "replay";

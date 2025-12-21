@@ -1,6 +1,7 @@
+import * as assert from "assert";
+
 import { Lexer } from "../src/lang/lexer";
 import { TokenType } from "../src/lang/token";
-import * as assert from "assert";
 
 function testLexer() {
   console.log("Running Lexer tests...");

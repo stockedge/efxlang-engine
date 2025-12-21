@@ -1,12 +1,12 @@
+import { type Task, type TaskState } from "../kernel/task";
+import { Env } from "../vm/env";
+import { Fiber, type Frame, type HandlerFrame } from "../vm/fiber";
 import {
   type Closure,
   type Continuation,
-  type Value,
   type FiberSnapshot,
+  type Value,
 } from "../vm/value";
-import { Env } from "../vm/env";
-import { Fiber, type Frame, type HandlerFrame } from "../vm/fiber";
-import { type Task, type TaskState } from "../kernel/task";
 import { fnv1a } from "./hashing";
 
 interface SerializedEnv {

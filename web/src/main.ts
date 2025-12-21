@@ -1,8 +1,9 @@
 import "./styles.css";
+
 import {
+  type DeosUiEvent,
   EventMask,
   PROTOCOL_VERSION,
-  type DeosUiEvent,
   type WorkerMessage,
 } from "./protocol";
 

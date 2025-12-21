@@ -1,6 +1,7 @@
+import * as assert from "assert";
+
 import { Lexer } from "../src/lang/lexer";
 import { Parser } from "../src/lang/parser";
-import * as assert from "assert";
 
 function testParser() {
   console.log("Running Parser tests...");

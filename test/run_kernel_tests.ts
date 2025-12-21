@@ -1,9 +1,10 @@
+import * as assert from "assert";
+
+import { Kernel } from "../src/kernel/kernel";
+import { Codegen } from "../src/lang/codegen";
 import { Lexer } from "../src/lang/lexer";
 import { Parser } from "../src/lang/parser";
 import { Resolver } from "../src/lang/resolver";
-import { Codegen } from "../src/lang/codegen";
-import { Kernel } from "../src/kernel/kernel";
-import * as assert from "assert";
 
 function testKernel() {
   console.log("Running Kernel tests...");

@@ -1,8 +1,8 @@
-import { type Program, type Stmt, type Expr, type BlockExpr } from "./ast";
-import { type ResolveResult } from "./resolver";
 import { Opcode, SyscallType } from "../bytecode/opcode";
-import { TokenType } from "./token";
 import { type Value } from "../vm/value";
+import { type BlockExpr, type Expr, type Program, type Stmt } from "./ast";
+import { type ResolveResult } from "./resolver";
+import { TokenType } from "./token";
 
 export interface TBCFile {
   consts: Value[];

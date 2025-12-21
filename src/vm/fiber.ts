@@ -1,5 +1,5 @@
-import { type Value, type Closure } from "./value";
 import { type Env } from "./env";
+import { type Closure, type Value } from "./value";
 
 export interface Frame {
   fnIndex: number;

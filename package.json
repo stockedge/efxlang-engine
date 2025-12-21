@@ -5,8 +5,9 @@
   "scripts": {
     "test": "vitest",
     "deos": "ts-node --transpile-only src/cli/index.ts",
-    "dev:browser": "vite --config vite.browser.config.ts",
-    "build:browser": "vite build --config vite.browser.config.ts",
+    "build:wasm": "asc wasm/deos_engine_shim.ts -o web/public/deos_engine.wasm -t web/public/deos_engine.wat --runtime stub --optimize --noAssert",
+    "dev:browser": "npm run build:wasm && vite --config vite.browser.config.ts",
+    "build:browser": "npm run build:wasm && vite build --config vite.browser.config.ts",
     "preview:browser": "vite preview --config vite.browser.config.ts",
     "lint": "eslint . --max-warnings=0",
     "format": "prettier --write .",
@@ -16,7 +17,7 @@
   },
   "lint-staged": {
     "*.ts": [
-      "eslint --fix --max-warnings=0",
+      "eslint --fix --max-warnings=0 --no-warn-ignored",
       "prettier --write"
     ],
     "*.{json,md}": [
@@ -30,8 +31,10 @@
   "devDependencies": {
     "@rollup/rollup-win32-x64-msvc": "^4.54.0",
     "@types/node": "^25.0.3",
+    "assemblyscript": "^0.28.8",
     "eslint": "^9.39.2",
     "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-simple-import-sort": "^12.1.1",
     "husky": "^9.1.7",
     "lint-staged": "^16.2.7",
     "prettier": "^3.7.4",

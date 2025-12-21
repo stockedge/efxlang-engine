@@ -1,20 +1,20 @@
-import { type Token, TokenType } from "./token";
 import {
-  type Program,
-  type Stmt,
-  type Expr,
-  type LetStmt,
-  type ExprStmt,
-  type CallExpr,
-  type FunExpr,
-  type IfExpr,
-  type WhileExpr,
   type BlockExpr,
-  type PerformExpr,
+  type CallExpr,
+  type Expr,
+  type ExprStmt,
+  type FunExpr,
   type HandleExpr,
-  type ReturnClause,
+  type IfExpr,
+  type LetStmt,
   type OpClause,
+  type PerformExpr,
+  type Program,
+  type ReturnClause,
+  type Stmt,
+  type WhileExpr,
 } from "./ast";
+import { type Token, TokenType } from "./token";
 
 export class Parser {
   private current = 0;

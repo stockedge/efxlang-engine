@@ -1,14 +1,14 @@
-import { type TBCFile, type TBCFunction } from "../lang/codegen";
 import { Opcode } from "../bytecode/opcode";
+import { type TBCFile, type TBCFunction } from "../lang/codegen";
+import { Env } from "./env";
+import { Fiber, type Frame } from "./fiber";
+import { type VMResult, VMStatus } from "./status";
 import {
-  type Value,
   type Closure,
   type Continuation,
   type FiberSnapshot,
+  type Value,
 } from "./value";
-import { Env } from "./env";
-import { Fiber, type Frame } from "./fiber";
-import { VMStatus, type VMResult } from "./status";
 
 export type VMHooks = {
   onPerform?: (args: { effect: string; argc: number }) => void;

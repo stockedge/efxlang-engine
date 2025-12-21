@@ -1,4 +1,4 @@
-import { Fiber } from "../vm/fiber";
+import { type Fiber } from "../vm/fiber";
 
 export enum TaskState {
   READY = "READY",

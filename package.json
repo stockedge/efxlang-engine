@@ -8,7 +8,7 @@
     "dev:browser": "vite --config vite.browser.config.ts",
     "build:browser": "vite build --config vite.browser.config.ts",
     "preview:browser": "vite preview --config vite.browser.config.ts",
-    "lint": "eslint .",
+    "lint": "eslint . --max-warnings=0",
     "format": "prettier --write .",
     "type-check": "tsc --noEmit",
     "type-check:browser": "tsc -p web/tsconfig.json --noEmit",
@@ -16,7 +16,7 @@
   },
   "lint-staged": {
     "*.ts": [
-      "eslint --fix",
+      "eslint --fix --max-warnings=0",
       "prettier --write"
     ],
     "*.{json,md}": [

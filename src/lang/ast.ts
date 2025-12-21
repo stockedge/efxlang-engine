@@ -1,4 +1,4 @@
-import { Token } from "./token";
+import { type Token } from "./token";
 
 export type Stmt = LetStmt | ExprStmt;
 

@@ -132,21 +132,21 @@ app.innerHTML = `
   </div>
 `;
 
-const statusEl = document.querySelector<HTMLSpanElement>("#status")!;
-const clockEl = document.querySelector<HTMLSpanElement>("#clock")!;
-const consoleEl = document.querySelector<HTMLDivElement>("#console")!;
-const timelineEl = document.querySelector<HTMLDivElement>("#timeline")!;
-const stateEl = document.querySelector<HTMLPreElement>("#state")!;
-const traceInfoEl = document.querySelector<HTMLPreElement>("#traceInfo")!;
-
-const followTickEl = document.querySelector<HTMLInputElement>("#followTick")!;
-const autoScrollEl = document.querySelector<HTMLInputElement>("#autoScroll")!;
-
-function $(id: string) {
+function $(id: string): HTMLElement {
   const el = document.getElementById(id);
   if (!el) throw new Error(`#${id} not found`);
   return el;
 }
+
+const statusEl = $("status") as HTMLSpanElement;
+const clockEl = $("clock") as HTMLSpanElement;
+const consoleEl = $("console") as HTMLDivElement;
+const timelineEl = $("timeline") as HTMLDivElement;
+const stateEl = $("state") as HTMLPreElement;
+const traceInfoEl = $("traceInfo") as HTMLPreElement;
+
+const followTickEl = $("followTick") as HTMLInputElement;
+const autoScrollEl = $("autoScroll") as HTMLInputElement;
 
 const worker = new Worker(new URL("./worker.ts", import.meta.url), {
   type: "module",
@@ -154,8 +154,6 @@ const worker = new Worker(new URL("./worker.ts", import.meta.url), {
 
 type UiMode = "Idle" | "Running" | "Paused" | "Recording" | "Replay";
 let uiMode: UiMode = "Idle";
-let lastTick = 0;
-let lastCycle = "0";
 
 const pending = new Map<
   string,
@@ -172,14 +170,12 @@ worker.onmessage = (ev: MessageEvent<WorkerMessage>) => {
     else cb.reject(msg.error);
     return;
   }
-  if (msg.type === "event") {
-    onEngineEvent(msg.event);
-  }
+  onEngineEvent(msg.event);
 };
 
-function sendCommand<C extends string, P extends object | undefined>(
-  command: C,
-  payload?: P,
+function sendCommand(
+  command: string,
+  payload?: Record<string, unknown>,
 ): Promise<unknown> {
   const requestId = crypto.randomUUID();
   const msg = {
@@ -206,9 +202,7 @@ function formatCycleShort(cycle: string) {
 }
 
 function updateClock(cycle: string, tick: number) {
-  lastCycle = cycle;
-  lastTick = tick;
-  clockEl.textContent = `tick=${tick} cycle=${formatCycleShort(cycle)}`;
+  clockEl.textContent = `tick=${String(tick)} cycle=${formatCycleShort(cycle)}`;
 }
 
 function appendConsoleLine(text: string) {
@@ -242,13 +236,13 @@ function onEngineEvent(ev: DeosUiEvent) {
   switch (ev.type) {
     case "tick":
       appendTimelineLine(
-        `tick ${ev.tick} @${formatCycleShort(ev.cycle)}`,
+        `tick ${String(ev.tick)} @${formatCycleShort(ev.cycle)}`,
         ev.tick,
       );
       return;
     case "taskSwitch":
       appendTimelineLine(
-        `taskSwitch ${ev.fromTid}->${ev.toTid} (${ev.reason}) tick=${ev.tick} @${formatCycleShort(
+        `taskSwitch ${String(ev.fromTid)}->${String(ev.toTid)} (${ev.reason}) tick=${String(ev.tick)} @${formatCycleShort(
           ev.cycle,
         )}`,
         ev.tick,
@@ -256,7 +250,7 @@ function onEngineEvent(ev: DeosUiEvent) {
       return;
     case "perform":
       appendTimelineLine(
-        `perform ${ev.effect} argc=${ev.argc} tid=${ev.tid} tick=${ev.tick} @${formatCycleShort(
+        `perform ${ev.effect} argc=${String(ev.argc)} tid=${String(ev.tid)} tick=${String(ev.tick)} @${formatCycleShort(
           ev.cycle,
         )}`,
         ev.tick,
@@ -264,7 +258,7 @@ function onEngineEvent(ev: DeosUiEvent) {
       return;
     case "contCall":
       appendTimelineLine(
-        `contCall tid=${ev.tid} usedBefore=${ev.oneShotUsedBefore} tick=${ev.tick} @${formatCycleShort(
+        `contCall tid=${String(ev.tid)} usedBefore=${String(ev.oneShotUsedBefore)} tick=${String(ev.tick)} @${formatCycleShort(
           ev.cycle,
         )}`,
         ev.tick,
@@ -272,13 +266,13 @@ function onEngineEvent(ev: DeosUiEvent) {
       return;
     case "contReturn":
       appendTimelineLine(
-        `contReturn tid=${ev.tid} tick=${ev.tick} @${formatCycleShort(ev.cycle)}`,
+        `contReturn tid=${String(ev.tid)} tick=${String(ev.tick)} @${formatCycleShort(ev.cycle)}`,
         ev.tick,
       );
       return;
     case "inputConsumed":
       appendTimelineLine(
-        `inputConsumed byte=${ev.byte} isDown=${ev.isDown} tick=${ev.tick} @${formatCycleShort(
+        `inputConsumed byte=${String(ev.byte)} isDown=${String(ev.isDown)} tick=${String(ev.tick)} @${formatCycleShort(
           ev.cycle,
         )}`,
         ev.tick,
@@ -286,15 +280,15 @@ function onEngineEvent(ev: DeosUiEvent) {
       return;
     case "policyPick":
       appendTimelineLine(
-        `policyPick idx=${ev.pickedIndex} runnable=[${ev.runnableTids.join(
+        `policyPick idx=${String(ev.pickedIndex)} runnable=[${ev.runnableTids.join(
           ",",
-        )}] tick=${ev.tick} @${formatCycleShort(ev.cycle)}`,
+        )}] tick=${String(ev.tick)} @${formatCycleShort(ev.cycle)}`,
         ev.tick,
       );
       return;
     case "error":
       appendTimelineLine(
-        `error ${ev.code}: ${ev.message} tick=${ev.tick} @${formatCycleShort(ev.cycle)}`,
+        `error ${ev.code}: ${ev.message} tick=${String(ev.tick)} @${formatCycleShort(ev.cycle)}`,
         ev.tick,
       );
       return;
@@ -306,14 +300,14 @@ async function refreshState(detail: "summary" | "full") {
     const payload = (await sendCommand("getState", { detail })) as {
       jsonText?: string;
     };
-    stateEl.textContent = payload?.jsonText ?? "(no state)";
-  } catch (e) {
+    stateEl.textContent = payload.jsonText ?? "(no state)";
+  } catch (e: unknown) {
     stateEl.textContent = `getState error: ${JSON.stringify(e)}`;
   }
 }
 
 function bindLeftTabs() {
-  const root = document.querySelector<HTMLDivElement>(".pane#left")!;
+  const root = $("left") as HTMLDivElement;
   const buttons = Array.from(
     root.querySelectorAll<HTMLButtonElement>(".tab[data-tab]"),
   );
@@ -324,6 +318,7 @@ function bindLeftTabs() {
   for (const b of buttons) {
     b.onclick = () => {
       const key = b.dataset.tab;
+      if (!key) return;
       for (const other of buttons) other.classList.remove("active");
       b.classList.add("active");
       for (const p of panels) p.classList.remove("active");
@@ -334,7 +329,7 @@ function bindLeftTabs() {
 }
 
 function bindRightTabs() {
-  const root = document.querySelector<HTMLDivElement>(".pane#right")!;
+  const root = $("right") as HTMLDivElement;
   const buttons = Array.from(
     root.querySelectorAll<HTMLButtonElement>(".tab[data-rtab]"),
   );
@@ -345,6 +340,7 @@ function bindRightTabs() {
   for (const b of buttons) {
     b.onclick = () => {
       const key = b.dataset.rtab;
+      if (!key) return;
       for (const other of buttons) other.classList.remove("active");
       b.classList.add("active");
       for (const p of panels) p.classList.remove("active");
@@ -358,34 +354,36 @@ bindLeftTabs();
 bindRightTabs();
 
 // Defaults
-const progSrcEl = document.querySelector<HTMLTextAreaElement>("#progSrc")!;
+const progSrcEl = $("progSrc") as HTMLTextAreaElement;
 progSrcEl.value = `// Example: timeslice switching (no yield)\n// 1) Compile as module 'progA' (prints 'A')\n// 2) Change 65 -> 66, set module 'progB' (prints 'B'), compile\n// 3) Create tasks: tid=1 module=progA, tid=2 module=progB\n// 4) Run to tick (e.g. 20) and watch taskSwitch reason=timeslice\n+\n+let burn = fun(n) => {\n+  if (n < 2000) { burn(n + 1) } else { 0 }\n+};\n+\n+let loop = fun(ch) => {\n+  burn(0);\n+  putc(ch);\n+  loop(ch)\n+};\n+\n+loop(65);\n`;
 
-const policySrcEl = document.querySelector<HTMLTextAreaElement>("#policySrc")!;
+const policySrcEl = $("policySrc") as HTMLTextAreaElement;
 policySrcEl.value = `// Policy must return a closure with arity 5.\n// Args: (nowTick, currentTid, currentIndex, runnableCount, domainId)\nlet pick = fun(nowTick, currentTid, currentIndex, runnableCount, domainId) => {\n  // reverse round-robin\n  (currentIndex + runnableCount - 1) % runnableCount\n};\n// Leave the closure as the program result:\npick;\n`;
 
 // TopBar actions
 ($("run") as HTMLButtonElement).onclick = async () => {
   setUiMode(uiMode === "Replay" ? "Replay" : "Running");
-  await sendCommand("run", { maxInstructions: 5_000_000 }).catch((e) =>
-    appendTimelineLine(`run error: ${JSON.stringify(e)}`),
+  await sendCommand("run", { maxInstructions: 5_000_000 }).catch(
+    (e: unknown) => {
+      appendTimelineLine(`run error: ${JSON.stringify(e)}`);
+    },
   );
   setUiMode("Paused");
   await refreshState("summary");
 };
 
 ($("pause") as HTMLButtonElement).onclick = async () => {
-  await sendCommand("pause").catch((e) =>
-    appendTimelineLine(`pause error: ${JSON.stringify(e)}`),
-  );
+  await sendCommand("pause").catch((e: unknown) => {
+    appendTimelineLine(`pause error: ${JSON.stringify(e)}`);
+  });
   setUiMode("Paused");
   await refreshState("summary");
 };
 
 ($("step") as HTMLButtonElement).onclick = async () => {
-  await sendCommand("step", { instructions: 1 }).catch((e) =>
-    appendTimelineLine(`step error: ${JSON.stringify(e)}`),
-  );
+  await sendCommand("step", { instructions: 1 }).catch((e: unknown) => {
+    appendTimelineLine(`step error: ${JSON.stringify(e)}`);
+  });
   setUiMode("Paused");
   await refreshState("full");
 };
@@ -393,7 +391,9 @@ policySrcEl.value = `// Policy must return a closure with arity 5.\n// Args: (no
 ($("stepRun") as HTMLButtonElement).onclick = async () => {
   const n = Number((($("stepN") as HTMLInputElement).value || "0").trim());
   await sendCommand("step", { instructions: Number.isFinite(n) ? n : 0 }).catch(
-    (e) => appendTimelineLine(`step error: ${JSON.stringify(e)}`),
+    (e: unknown) => {
+      appendTimelineLine(`step error: ${JSON.stringify(e)}`);
+    },
   );
   setUiMode("Paused");
   await refreshState("full");
@@ -405,7 +405,9 @@ policySrcEl.value = `// Policy must return a closure with arity 5.\n// Args: (no
   await sendCommand("run", {
     untilTick: Number.isFinite(t) ? t : 0,
     maxInstructions: 5_000_000,
-  }).catch((e) => appendTimelineLine(`runToTick error: ${JSON.stringify(e)}`));
+  }).catch((e: unknown) => {
+    appendTimelineLine(`runToTick error: ${JSON.stringify(e)}`);
+  });
   setUiMode("Paused");
   await refreshState("summary");
 };
@@ -414,17 +416,17 @@ policySrcEl.value = `// Policy must return a closure with arity 5.\n// Args: (no
   const t = Number((($("revToTick") as HTMLInputElement).value || "0").trim());
   await sendCommand("reverseToTick", {
     tick: Number.isFinite(t) ? t : 0,
-  }).catch((e) =>
-    appendTimelineLine(`reverseToTick error: ${JSON.stringify(e)}`),
-  );
+  }).catch((e: unknown) => {
+    appendTimelineLine(`reverseToTick error: ${JSON.stringify(e)}`);
+  });
   setUiMode("Paused");
   await refreshState("full");
 };
 
 ($("reset") as HTMLButtonElement).onclick = async () => {
-  await sendCommand("reset").catch((e) =>
-    appendTimelineLine(`reset error: ${JSON.stringify(e)}`),
-  );
+  await sendCommand("reset").catch((e: unknown) => {
+    appendTimelineLine(`reset error: ${JSON.stringify(e)}`);
+  });
   consoleEl.textContent = "";
   timelineEl.textContent = "";
   stateEl.textContent = "";
@@ -435,15 +437,15 @@ policySrcEl.value = `// Policy must return a closure with arity 5.\n// Args: (no
 
 // Record / Trace controls
 ($("recordStart") as HTMLButtonElement).onclick = async () => {
-  await sendCommand("recordStart").catch((e) =>
-    appendTimelineLine(`recordStart error: ${JSON.stringify(e)}`),
-  );
+  await sendCommand("recordStart").catch((e: unknown) => {
+    appendTimelineLine(`recordStart error: ${JSON.stringify(e)}`);
+  });
   setUiMode("Recording");
 };
 ($("recordStop") as HTMLButtonElement).onclick = async () => {
-  await sendCommand("recordStop").catch((e) =>
-    appendTimelineLine(`recordStop error: ${JSON.stringify(e)}`),
-  );
+  await sendCommand("recordStop").catch((e: unknown) => {
+    appendTimelineLine(`recordStop error: ${JSON.stringify(e)}`);
+  });
   setUiMode("Paused");
 };
 ($("downloadTrace") as HTMLButtonElement).onclick = async () => {
@@ -451,7 +453,7 @@ policySrcEl.value = `// Policy must return a closure with arity 5.\n// Args: (no
     const payload = (await sendCommand("getTrace")) as {
       traceJsonText?: string;
     };
-    const jsonText = payload?.traceJsonText ?? "";
+    const jsonText = payload.traceJsonText ?? "";
     traceInfoEl.textContent = jsonText
       ? `(trace loaded)\n${jsonText.slice(0, 8000)}`
       : "(no trace)";
@@ -473,23 +475,25 @@ policySrcEl.value = `// Policy must return a closure with arity 5.\n// Args: (no
   const file = input.files?.[0];
   if (!file) return;
   const text = await file.text();
-  await sendCommand("loadTrace", { traceJsonText: text }).catch((e) =>
-    appendTimelineLine(`loadTrace error: ${JSON.stringify(e)}`),
+  await sendCommand("loadTrace", { traceJsonText: text }).catch(
+    (e: unknown) => {
+      appendTimelineLine(`loadTrace error: ${JSON.stringify(e)}`);
+    },
   );
   traceInfoEl.textContent = `(trace loaded)\n${text.slice(0, 8000)}`;
 };
 
 ($("replayStart") as HTMLButtonElement).onclick = async () => {
-  await sendCommand("replayStart").catch((e) =>
-    appendTimelineLine(`replayStart error: ${JSON.stringify(e)}`),
-  );
+  await sendCommand("replayStart").catch((e: unknown) => {
+    appendTimelineLine(`replayStart error: ${JSON.stringify(e)}`);
+  });
   setUiMode("Replay");
   await refreshState("summary");
 };
 ($("replayStop") as HTMLButtonElement).onclick = async () => {
-  await sendCommand("replayStop").catch((e) =>
-    appendTimelineLine(`replayStop error: ${JSON.stringify(e)}`),
-  );
+  await sendCommand("replayStop").catch((e: unknown) => {
+    appendTimelineLine(`replayStop error: ${JSON.stringify(e)}`);
+  });
   setUiMode("Paused");
   await refreshState("summary");
 };
@@ -505,7 +509,8 @@ policySrcEl.value = `// Policy must return a closure with arity 5.\n// Args: (no
       sourceName: `${moduleName}.efx`,
       sourceText,
     })) as { tbc?: ArrayBuffer };
-    const tbc = payload.tbc as ArrayBuffer;
+    const tbc = payload.tbc;
+    if (!tbc) throw new Error("compile returned no tbc");
     await sendCommand("loadModule", { moduleName, tbc });
     appendTimelineLine(`loaded module '${moduleName}'`);
   } catch (e) {
@@ -520,7 +525,7 @@ policySrcEl.value = `// Policy must return a closure with arity 5.\n// Args: (no
   ).trim();
   try {
     await sendCommand("createTask", { tid, moduleName });
-    appendTimelineLine(`created task tid=${tid} module=${moduleName}`);
+    appendTimelineLine(`created task tid=${String(tid)} module=${moduleName}`);
   } catch (e) {
     appendTimelineLine(`createTask error: ${JSON.stringify(e)}`);
   }
@@ -536,7 +541,8 @@ policySrcEl.value = `// Policy must return a closure with arity 5.\n// Args: (no
       sourceName: `${moduleName}.efx`,
       sourceText,
     })) as { tbc?: ArrayBuffer };
-    const tbc = payload.tbc as ArrayBuffer;
+    const tbc = payload.tbc;
+    if (!tbc) throw new Error("compile returned no tbc");
     await sendCommand("loadModule", { moduleName, tbc });
     appendTimelineLine(`loaded policy module '${moduleName}'`);
   } catch (e) {
@@ -548,14 +554,18 @@ policySrcEl.value = `// Policy must return a closure with arity 5.\n// Args: (no
   const moduleName = (
     ($("policyModule") as HTMLInputElement).value || "sched"
   ).trim();
-  await sendCommand("setSchedulerPolicy", { moduleName }).catch((e) =>
-    appendTimelineLine(`setPolicy error: ${JSON.stringify(e)}`),
+  await sendCommand("setSchedulerPolicy", { moduleName }).catch(
+    (e: unknown) => {
+      appendTimelineLine(`setPolicy error: ${JSON.stringify(e)}`);
+    },
   );
   appendTimelineLine(`policy set: ${moduleName}`);
 };
 ($("clearPolicy") as HTMLButtonElement).onclick = async () => {
-  await sendCommand("setSchedulerPolicy", { moduleName: null }).catch((e) =>
-    appendTimelineLine(`clearPolicy error: ${JSON.stringify(e)}`),
+  await sendCommand("setSchedulerPolicy", { moduleName: null }).catch(
+    (e: unknown) => {
+      appendTimelineLine(`clearPolicy error: ${JSON.stringify(e)}`);
+    },
   );
   appendTimelineLine(`policy cleared`);
 };
@@ -608,7 +618,7 @@ await sendCommand("init", {
     EventMask.InputConsumed |
     EventMask.PolicyPick |
     EventMask.Error,
-}).catch((e) => {
+}).catch((e: unknown) => {
   appendTimelineLine(`init error: ${JSON.stringify(e)}`);
 });
 setUiMode("Paused");

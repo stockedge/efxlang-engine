@@ -1,4 +1,4 @@
-import { Env } from "./env";
+import { type Env } from "./env";
 
 export type Value = number | boolean | string | null | Closure | Continuation;
 

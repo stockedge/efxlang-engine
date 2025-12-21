@@ -1,9 +1,14 @@
-import { TBCFile, TBCFunction } from "../lang/codegen";
+import { type TBCFile, type TBCFunction } from "../lang/codegen";
 import { Opcode } from "../bytecode/opcode";
-import { Value, Closure, Continuation, FiberSnapshot } from "./value";
+import {
+  type Value,
+  type Closure,
+  type Continuation,
+  type FiberSnapshot,
+} from "./value";
 import { Env } from "./env";
-import { Fiber, Frame } from "./fiber";
-import { VMStatus, VMResult } from "./status";
+import { Fiber, type Frame } from "./fiber";
+import { VMStatus, type VMResult } from "./status";
 
 export type VMHooks = {
   onPerform?: (args: { effect: string; argc: number }) => void;
@@ -73,7 +78,7 @@ export class VM {
     const opcode = fn.code[frame.ip++] as Opcode;
     if (this.debug) {
       console.log(
-        `STEP: Fn${frame.fnIndex} @${frame.ip - 1} Op:0x${opcode.toString(16)} stack:${this.fiber.valueStack.length}`,
+        `STEP: Fn${String(frame.fnIndex)} @${String(frame.ip - 1)} Op:0x${opcode.toString(16)} stack:${String(this.fiber.valueStack.length)}`,
       );
     }
     this.cycle++;
@@ -176,7 +181,7 @@ export class VM {
       }
       case Opcode.CALL: {
         const argc = this.readU16(frame, fn);
-        const args = new Array(argc);
+        const args = new Array<Value>(argc);
         for (let i = argc - 1; i >= 0; i--) args[i] = this.pop();
         this.callValue(this.pop(), args);
         break;
@@ -242,10 +247,10 @@ export class VM {
       case Opcode.PERFORM: {
         const nameIdx = this.readU16(frame, fn);
         const argc = this.readU16(frame, fn);
-        const args = new Array(argc);
+        const args = new Array<Value>(argc);
         for (let i = argc - 1; i >= 0; i--) args[i] = this.pop();
         this.hooks?.onPerform?.({
-          effect: String(this.tbc.consts[nameIdx]),
+          effect: this.stringifyValue(this.tbc.consts[nameIdx]),
           argc,
         });
         this.performEffect(nameIdx, args);
@@ -300,7 +305,9 @@ export class VM {
       }
     }
     if (!clauseClosure)
-      throw new Error(`UnhandledEffect: ${this.tbc.consts[effectNameConst]}`);
+      throw new Error(
+        `UnhandledEffect: ${this.stringifyValue(this.tbc.consts[effectNameConst])}`,
+      );
 
     const H = this.fiber.handlerStack[handlerIndex];
     const cont: Continuation = {
@@ -318,27 +325,30 @@ export class VM {
 
   private callValue(callee: Value, args: Value[]): void {
     if (callee && typeof callee === "object") {
-      if (callee.tag === "Closure") {
-        const fn = this.tbc.functions[callee.fnIndex];
-        if (args.length !== fn.arity)
-          throw new Error(`ArityError: ${fn.arity} expected`);
-        const env = new Env(callee.env, fn.locals);
-        for (let i = 0; i < args.length; i++) {
-          env.slots[i] = args[i];
-          env.written[i] = true;
+      switch (callee.tag) {
+        case "Closure": {
+          const fn = this.tbc.functions[callee.fnIndex];
+          if (args.length !== fn.arity)
+            throw new Error(`ArityError: ${String(fn.arity)} expected`);
+          const env = new Env(callee.env, fn.locals);
+          for (let i = 0; i < args.length; i++) {
+            env.slots[i] = args[i];
+            env.written[i] = true;
+          }
+          this.fiber.callStack.push({ fnIndex: callee.fnIndex, ip: 0, env });
+          return;
         }
-        this.fiber.callStack.push({ fnIndex: callee.fnIndex, ip: 0, env });
-        return;
-      } else if (callee.tag === "Cont") {
-        this.hooks?.onContCall?.({ oneShotUsedBefore: callee.used });
-        if (callee.used) throw new Error("ContinuationAlreadyUsed");
-        callee.used = true;
-        const parent = this.fiber;
-        this.fiber = this.restoreFiberFromSnapshot(callee.snap);
-        this.fiber.parent = parent;
-        this.fiber.yielding = true;
-        this.push(args[0]);
-        return;
+        case "Cont": {
+          this.hooks?.onContCall?.({ oneShotUsedBefore: callee.used });
+          if (callee.used) throw new Error("ContinuationAlreadyUsed");
+          callee.used = true;
+          const parent = this.fiber;
+          this.fiber = this.restoreFiberFromSnapshot(callee.snap);
+          this.fiber.parent = parent;
+          this.fiber.yielding = true;
+          this.push(args[0]);
+          return;
+        }
       }
     }
     throw new Error("CallNonCallable");
@@ -363,11 +373,26 @@ export class VM {
   private isTruthy(v: Value): boolean {
     return v !== false && v !== null;
   }
+
+  private stringifyValue(v: Value): string {
+    if (v === null) return "null";
+    if (typeof v === "number" || typeof v === "boolean") return String(v);
+    if (typeof v === "string") return v;
+
+    switch (v.tag) {
+      case "Closure":
+        return `Closure(fn=${String(v.fnIndex)})`;
+      case "Cont":
+        return `Cont(used=${String(v.used)})`;
+    }
+  }
   public push(v: Value) {
     this.fiber.valueStack.push(v);
   }
   public pop(): Value {
-    return this.fiber.valueStack.pop()!;
+    const v = this.fiber.valueStack.pop();
+    if (v === undefined) throw new Error("PopEmptyStack");
+    return v;
   }
   private peek(): Value {
     return this.fiber.valueStack[this.fiber.valueStack.length - 1];

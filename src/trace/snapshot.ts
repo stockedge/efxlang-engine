@@ -1,7 +1,12 @@
-import { Value, FiberSnapshot } from "../vm/value";
+import {
+  type Closure,
+  type Continuation,
+  type Value,
+  type FiberSnapshot,
+} from "../vm/value";
 import { Env } from "../vm/env";
-import { Fiber, Frame, HandlerFrame } from "../vm/fiber";
-import { Task, TaskState } from "../kernel/task";
+import { Fiber, type Frame, type HandlerFrame } from "../vm/fiber";
+import { type Task, type TaskState } from "../kernel/task";
 import { fnv1a } from "./hashing";
 
 interface SerializedEnv {
@@ -121,34 +126,35 @@ export class StateSerializer {
     ) {
       return v;
     }
-    if (v.tag === "Closure") {
-      return {
-        tag: "Closure",
-        ref: this.getObjectId(v, () => ({
-          fnIndex: v.fnIndex,
-          env: this.getObjectId(v.env, () => this.serializeEnv(v.env)),
-        })),
-      };
+
+    switch (v.tag) {
+      case "Closure":
+        return {
+          tag: "Closure",
+          ref: this.getObjectId(v, () => ({
+            fnIndex: v.fnIndex,
+            env: this.getObjectId(v.env, () => this.serializeEnv(v.env)),
+          })),
+        };
+      case "Cont":
+        return {
+          tag: "Cont",
+          used: v.used,
+          ref: this.getObjectId(v, () => ({
+            snap: this.serializeSnapshot(v.snap),
+          })),
+        };
     }
-    if (v.tag === "Cont") {
-      return {
-        tag: "Cont",
-        used: v.used,
-        ref: this.getObjectId(v, () => ({
-          snap: this.serializeSnapshot(v.snap),
-        })),
-      };
-    }
-    return null;
   }
 
   private serializeEnv(env: Env): SerializedEnv {
+    const parent = env.parent;
     return {
       tag: "Env",
       slots: env.slots.map((v) => this.serializeValue(v)),
       written: env.written,
-      parent: env.parent
-        ? this.getObjectId(env.parent, () => this.serializeEnv(env.parent!))
+      parent: parent
+        ? this.getObjectId(parent, () => this.serializeEnv(parent))
         : null,
     };
   }
@@ -164,7 +170,8 @@ export class StateSerializer {
   }
 
   private getObjectId(obj: object, create: () => unknown): number {
-    if (this.idMap.has(obj)) return this.idMap.get(obj)!;
+    const existing = this.idMap.get(obj);
+    if (existing !== undefined) return existing;
     const id = this.nextId++;
     this.idMap.set(obj, id);
     const entry = { id, ...(create() as object) };
@@ -173,22 +180,10 @@ export class StateSerializer {
   }
 
   public static hashState(serialized: unknown): string {
-    // Deterministic JSON stringify
-    const json = JSON.stringify(serialized, (_key, value) => {
-      // if (value instanceof Map) return Array.from(value.entries()); // shouldn't happen here
-      return value;
-    });
+    const json = JSON.stringify(serialized);
     return fnv1a(json);
   }
 }
-
-type SerializedValue =
-  | null
-  | number
-  | boolean
-  | string
-  | { tag: "Closure"; ref: number }
-  | { tag: "Cont"; used: boolean; ref: number };
 
 type HeapEntry =
   | SerializedEnv
@@ -196,12 +191,20 @@ type HeapEntry =
   | SerializedContHeapEntry;
 
 export class StateDeserializer {
+  private isClosure(v: object): v is Closure {
+    return (v as { tag?: unknown }).tag === "Closure";
+  }
+
+  private isContinuation(v: object): v is Continuation {
+    return (v as { tag?: unknown }).tag === "Cont";
+  }
+
   deserializeTasks(serialized: {
     tasks: SerializedTask[];
     heap: unknown[];
   }): Task[] {
     const heap = this.normalizeHeap(serialized.heap);
-    const objById = new Map<number, object>();
+    const objById = new Map<number, Env | Closure | Continuation>();
 
     for (const entry of heap) {
       if (this.isSerializedEnv(entry)) {
@@ -209,11 +212,25 @@ export class StateDeserializer {
         continue;
       }
       if (this.isSerializedContHeapEntry(entry)) {
-        objById.set(entry.id, { tag: "Cont", used: false, snap: null } as any);
+        objById.set(entry.id, {
+          tag: "Cont",
+          used: false,
+          snap: {
+            valueStack: [],
+            callStack: [],
+            handlerStack: [],
+            yieldFnIndex: -1,
+            yieldPc: -1,
+          },
+        });
         continue;
       }
       if (this.isSerializedClosureHeapEntry(entry)) {
-        objById.set(entry.id, { tag: "Closure", fnIndex: 0, env: null } as any);
+        objById.set(entry.id, {
+          tag: "Closure",
+          fnIndex: 0,
+          env: new Env(undefined, 0),
+        });
         continue;
       }
       throw new Error(`Unknown heap entry: ${JSON.stringify(entry)}`);
@@ -228,22 +245,27 @@ export class StateDeserializer {
       ) {
         return v;
       }
-      if (typeof v !== "object" || v === null) return null;
+      if (typeof v !== "object") return null;
 
       const tag = (v as { tag?: unknown }).tag;
       if (tag === "Closure") {
         const ref = (v as { ref?: unknown }).ref;
         if (typeof ref !== "number") throw new Error("Bad Closure ref");
-        return objById.get(ref) as Value;
+        const obj = objById.get(ref);
+        if (!obj || !(obj instanceof Object) || !this.isClosure(obj))
+          throw new Error("Bad Closure ref target");
+        return obj;
       }
       if (tag === "Cont") {
         const ref = (v as { ref?: unknown }).ref;
         const used = (v as { used?: unknown }).used;
         if (typeof ref !== "number") throw new Error("Bad Cont ref");
         if (typeof used !== "boolean") throw new Error("Bad Cont used");
-        const cont = objById.get(ref) as any;
-        cont.used = used;
-        return cont as Value;
+        const obj = objById.get(ref);
+        if (!obj || !(obj instanceof Object) || !this.isContinuation(obj))
+          throw new Error("Bad Cont ref target");
+        obj.used = used;
+        return obj;
       }
       return null;
     };
@@ -294,13 +316,13 @@ export class StateDeserializer {
           if (
             !decoded ||
             typeof decoded !== "object" ||
-            (decoded as any).tag !== "Closure"
+            !this.isClosure(decoded)
           ) {
             throw new Error("Bad clause.clause");
           }
-          return { effectNameConst, clause: decoded as any };
+          return { effectNameConst, clause: decoded };
         }),
-        onReturn: onReturn ? (decodeValue(onReturn) as any) : null,
+        onReturn: onReturn ? this.decodeOnReturn(decodeValue(onReturn)) : null,
         baseCallDepth,
         baseValueHeight,
         doneFnIndex,
@@ -330,14 +352,21 @@ export class StateDeserializer {
         continue;
       }
       if (this.isSerializedClosureHeapEntry(entry)) {
-        const cl = objById.get(entry.id) as any;
-        cl.fnIndex = entry.fnIndex;
-        cl.env = objById.get(entry.env) as Env;
+        const obj = objById.get(entry.id);
+        if (!obj || !(obj instanceof Object) || !this.isClosure(obj))
+          throw new Error("Bad closure entry id");
+        const env = objById.get(entry.env);
+        if (!env || !(env instanceof Env))
+          throw new Error("Bad closure entry env ref");
+        obj.fnIndex = entry.fnIndex;
+        obj.env = env;
         continue;
       }
       if (this.isSerializedContHeapEntry(entry)) {
-        const cont = objById.get(entry.id) as any;
-        cont.snap = decodeFiberSnapshot(entry.snap);
+        const obj = objById.get(entry.id);
+        if (!obj || !(obj instanceof Object) || !this.isContinuation(obj))
+          throw new Error("Bad cont entry id");
+        obj.snap = decodeFiberSnapshot(entry.snap);
         continue;
       }
     }
@@ -400,7 +429,14 @@ export class StateDeserializer {
       v !== null &&
       typeof (v as { id?: unknown }).id === "number" &&
       typeof (v as { snap?: unknown }).snap === "object" &&
+      (v as { snap?: unknown }).snap !== null &&
       (v as { tag?: unknown }).tag === undefined
     );
+  }
+
+  private decodeOnReturn(v: Value): Closure {
+    if (!v || typeof v !== "object" || !this.isClosure(v))
+      throw new Error("Bad handler.onReturn");
+    return v;
   }
 }

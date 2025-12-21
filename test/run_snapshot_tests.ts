@@ -1,7 +1,7 @@
 import { StateSerializer } from "../src/trace/snapshot";
 import { Env } from "../src/vm/env";
 import { Fiber } from "../src/vm/fiber";
-import { Task, TaskState } from "../src/kernel/task";
+import { type Task, TaskState } from "../src/kernel/task";
 import * as assert from "assert";
 
 function testSnapshot() {
@@ -72,7 +72,7 @@ function testSnapshot() {
     ) as { tag: string; slots: unknown[] };
     const closureRef = envObj.slots[0] as { tag: string; ref: number };
     assert.strictEqual(closureRef.tag, "Closure");
-    assert.ok(closureRef.ref !== undefined);
+    assert.ok(closureRef.ref >= 0);
 
     console.log("  ✓ Cyclic reference handling in snapshot");
   }

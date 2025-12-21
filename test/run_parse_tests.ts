@@ -14,10 +14,8 @@ function testParser() {
     assert.strictEqual(program.statements.length, 1);
     const stmt = program.statements[0];
     assert.strictEqual(stmt.kind, "LetStmt");
-    if (stmt.kind === "LetStmt") {
-      assert.strictEqual(stmt.name.lexeme, "x");
-      assert.strictEqual(stmt.initializer.kind, "BinaryExpr");
-    }
+    assert.strictEqual(stmt.name.lexeme, "x");
+    assert.strictEqual(stmt.initializer.kind, "BinaryExpr");
     console.log("  ✓ Simple let and binary expr");
   }
 
@@ -50,9 +48,7 @@ function testParser() {
     const program = new Parser(tokens).parse();
     const stmt = program.statements[0];
     assert.strictEqual(stmt.kind, "ExprStmt");
-    if (stmt.kind === "ExprStmt") {
-      assert.strictEqual(stmt.expr.kind, "HandleExpr");
-    }
+    assert.strictEqual(stmt.expr.kind, "HandleExpr");
     console.log("  ✓ Handle / Perform expressions");
   }
 

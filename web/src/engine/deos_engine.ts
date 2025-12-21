@@ -76,9 +76,12 @@ function valueToDeterministicString(v: Value): string {
     case "string":
       return v;
     case "object": {
-      if (v.tag === "Closure") return `<closure fn#${v.fnIndex}>`;
-      if (v.tag === "Cont") return `<cont used=${v.used ? "true" : "false"}>`;
-      return "null";
+      switch (v.tag) {
+        case "Closure":
+          return `<closure fn#${String(v.fnIndex)}>`;
+        case "Cont":
+          return `<cont used=${v.used ? "true" : "false"}>`;
+      }
     }
   }
 }
@@ -205,8 +208,8 @@ export class DeosEngine {
     const mod = this.modules.get(moduleName);
     if (!mod) throw new Error(`ModuleNotLoaded: ${moduleName}`);
 
-    const fn = mod.tbc.functions[entryFnIndex];
-    if (!fn) throw new Error(`InvalidEntryFnIndex: ${entryFnIndex}`);
+    const fn = mod.tbc.functions.at(entryFnIndex);
+    if (!fn) throw new Error(`InvalidEntryFnIndex: ${String(entryFnIndex)}`);
 
     const fiber = new Fiber();
     const env = new Env(undefined, fn.locals);
@@ -254,7 +257,7 @@ export class DeosEngine {
       vm,
     });
 
-    if (this.currentTid === null) this.currentTid = tid;
+    this.currentTid ??= tid;
     return 0;
   }
 
@@ -555,25 +558,31 @@ export class DeosEngine {
   }
 
   loadSnapshotJson(json: string): number {
-    const parsed = JSON.parse(json) as SnapshotV1;
-    if (!parsed || parsed.version !== "1.0")
+    const parsed = JSON.parse(json) as unknown;
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      (parsed as { version?: unknown }).version !== "1.0"
+    ) {
       throw new Error("BadSnapshotVersion");
+    }
+    const snap = parsed as SnapshotV1;
 
     this.init(
-      parsed.config.cyclesPerTick,
-      parsed.config.timesliceTicks,
-      parsed.config.snapshotEveryTicks,
-      parsed.config.eventMask,
+      snap.config.cyclesPerTick,
+      snap.config.timesliceTicks,
+      snap.config.snapshotEveryTicks,
+      snap.config.eventMask,
     );
 
-    this.cycle = BigInt(parsed.cycle);
-    this.tick = parsed.tick;
-    this.currentTid = parsed.currentTid;
-    this.timesliceUsed = parsed.timesliceUsed;
-    this.lastSafepointTick = parsed.lastSafepointTick;
-    this.yieldRequested = parsed.yieldRequested;
-    this.kbdQueue = [...parsed.kbdQueue];
-    this.policy.moduleName = parsed.policy.moduleName;
+    this.cycle = BigInt(snap.cycle);
+    this.tick = snap.tick;
+    this.currentTid = snap.currentTid;
+    this.timesliceUsed = snap.timesliceUsed;
+    this.lastSafepointTick = snap.lastSafepointTick;
+    this.yieldRequested = snap.yieldRequested;
+    this.kbdQueue = [...snap.kbdQueue];
+    this.policy.moduleName = snap.policy.moduleName;
     this.policy.closure = null;
     this.lastPolicyPick = null;
 
@@ -581,15 +590,15 @@ export class DeosEngine {
       number,
       SnapshotV1["taskModules"][number]
     >();
-    for (const tm of parsed.taskModules) taskModuleByTid.set(tm.tid, tm);
+    for (const tm of snap.taskModules) taskModuleByTid.set(tm.tid, tm);
 
     const deser = new StateDeserializer();
-    const coreTasks = deser.deserializeTasks(parsed.vmState);
+    const coreTasks = deser.deserializeTasks(snap.vmState);
 
     this.tasks.clear();
     for (const t of coreTasks) {
       const tm = taskModuleByTid.get(t.id);
-      if (!tm) throw new Error(`SnapshotMissingTaskModule: ${t.id}`);
+      if (!tm) throw new Error(`SnapshotMissingTaskModule: ${String(t.id)}`);
       const mod = this.modules.get(tm.moduleName);
       if (!mod) throw new Error(`ModuleNotLoaded: ${tm.moduleName}`);
 
@@ -686,7 +695,12 @@ export class DeosEngine {
 
   private handleSyscall(task: EngineTask, sysno: number) {
     const tid = task.tid;
-    switch (sysno) {
+    if (!(sysno in SyscallType)) {
+      task.vm.push(null);
+      return;
+    }
+    const syscall = sysno as SyscallType;
+    switch (syscall) {
       case SyscallType.SYS_PRINT: {
         const v = task.vm.pop();
         const text = valueToDeterministicString(v) + "\n";
@@ -715,8 +729,8 @@ export class DeosEngine {
         break;
       }
       case SyscallType.SYS_GETC: {
-        const v = this.kbdQueue.length > 0 ? this.kbdQueue.shift()! : -1;
-        task.vm.push(v);
+        const v = this.kbdQueue.shift();
+        task.vm.push(v ?? -1);
         break;
       }
       case SyscallType.SYS_YIELD: {
@@ -755,7 +769,8 @@ export class DeosEngine {
       this.replaySchedule.length > 0 &&
       this.replaySchedule[0].atCycle <= this.cycle
     ) {
-      const ev = this.replaySchedule.shift()!;
+      const ev = this.replaySchedule.shift();
+      if (!ev) break;
       this.kbdQueue.push(ev.byte);
       this.emit({
         type: "inputConsumed",
@@ -769,7 +784,8 @@ export class DeosEngine {
 
     if (this.mode !== "replay") {
       while (this.hostKbdQueue.length > 0) {
-        const ev = this.hostKbdQueue.shift()!;
+        const ev = this.hostKbdQueue.shift();
+        if (!ev) break;
         this.kbdQueue.push(ev.byte);
         this.emit({
           type: "inputConsumed",
@@ -868,9 +884,10 @@ export class DeosEngine {
     const mod = this.modules.get(moduleName);
     if (!mod) throw new Error("PolicyModuleNotLoaded");
 
-    const fn = mod.tbc.functions[closure.fnIndex];
-    const arity = fn?.arity ?? 0;
-    if (arity !== 5) throw new Error(`PolicyArityMismatch:${arity}`);
+    const fn = mod.tbc.functions.at(closure.fnIndex);
+    if (!fn) throw new Error("PolicyFnNotFound");
+    const arity = fn.arity;
+    if (arity !== 5) throw new Error(`PolicyArityMismatch:${String(arity)}`);
 
     const env = new Env(closure.env, fn.locals);
     const args: Value[] = [
@@ -928,19 +945,18 @@ export class DeosEngine {
     if (this.currentTid === null) {
       const next = Array.from(this.tasks.values())
         .filter((t) => t.state === "RUNNABLE")
-        .sort((a, b) => a.tid - b.tid)[0];
+        .sort((a, b) => a.tid - b.tid)
+        .at(0);
       if (!next) return null;
       this.currentTid = next.tid;
       return next;
     }
 
     const current = this.tasks.get(this.currentTid);
-    if (current && current.state === "RUNNABLE") return current;
+    if (current?.state === "RUNNABLE") return current;
 
     this.switchTask("sleepWake");
-    return this.currentTid !== null
-      ? (this.tasks.get(this.currentTid) ?? null)
-      : null;
+    return this.tasks.get(this.currentTid) ?? null;
   }
 
   private isContReturnStep(fiber: Fiber): boolean {

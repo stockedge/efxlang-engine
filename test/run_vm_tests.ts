@@ -70,11 +70,11 @@ function testVM() {
 }
 
 function runUntilHalt(vm: VM) {
-  while (true) {
+  for (;;) {
     const res = vm.run();
     if (res.status === VMStatus.HALTED) return res.value ?? null;
     if (res.status === VMStatus.SAFEPOINT) continue;
-    throw new Error(`Unexpected VM status: ${res.status}`);
+    throw new Error(`Unexpected VM status: ${String(res.status)}`);
   }
 }
 

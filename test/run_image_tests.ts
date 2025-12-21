@@ -3,7 +3,7 @@ import { Parser } from "../src/lang/parser";
 import { Resolver } from "../src/lang/resolver";
 import { Codegen } from "../src/lang/codegen";
 import { TBCEncoder } from "../src/bytecode/bin";
-import { Kernel, ImageFormat } from "../src/kernel/kernel";
+import { Kernel, type ImageFormat } from "../src/kernel/kernel";
 import * as assert from "assert";
 
 function testImage() {

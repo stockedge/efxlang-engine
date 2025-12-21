@@ -1,8 +1,8 @@
-import { Program, Stmt, Expr, BlockExpr } from "./ast";
-import { ResolveResult } from "./resolver";
+import { type Program, type Stmt, type Expr, type BlockExpr } from "./ast";
+import { type ResolveResult } from "./resolver";
 import { Opcode, SyscallType } from "../bytecode/opcode";
 import { TokenType } from "./token";
-import { Value } from "../vm/value";
+import { type Value } from "../vm/value";
 
 export interface TBCFile {
   consts: Value[];
@@ -43,7 +43,8 @@ export class Codegen {
   constructor(private result: ResolveResult) {}
 
   generate(program: Program): TBCFile {
-    const fnIdx = this.result.fnIdxMap.get(program)!;
+    const fnIdx = this.result.fnIdxMap.get(program);
+    if (fnIdx === undefined) throw new Error("Missing program fnIdx");
     this.genFunction(
       fnIdx,
       Array.isArray(program.statements)
@@ -74,15 +75,16 @@ export class Codegen {
       this.genExpr(body);
     }
 
-    if (fnIdx === 0 && this.peekCode() !== Opcode.HALT) {
+    const lastByte = this.peekCode();
+    if (fnIdx === 0 && (lastByte as Opcode) !== Opcode.HALT) {
       this.emit(Opcode.HALT);
-    } else if (this.peekCode() !== Opcode.RET) {
+    } else if ((lastByte as Opcode) !== Opcode.RET) {
       this.emit(Opcode.RET);
     }
 
     this.functions[fnIdx] = {
       arity,
-      locals: this.result.maxSlots.get(fnIdx) || 0,
+      locals: this.result.maxSlots.get(fnIdx) ?? 0,
       handlers: this.currentHandlers,
       code: new Uint8Array(this.currentCode),
     };
@@ -95,7 +97,8 @@ export class Codegen {
     switch (stmt.kind) {
       case "LetStmt": {
         this.genExpr(stmt.initializer);
-        const slot = this.result.letSlots.get(stmt)!;
+        const slot = this.result.letSlots.get(stmt);
+        if (slot === undefined) throw new Error("Missing let slot");
         this.emit(Opcode.STORE);
         this.emitU16(0);
         this.emitU16(slot);
@@ -166,7 +169,8 @@ export class Codegen {
         this.emitU16(expr.args.length);
         break;
       case "FunExpr": {
-        const fnIdx = this.result.fnIdxMap.get(expr)!;
+        const fnIdx = this.result.fnIdxMap.get(expr);
+        if (fnIdx === undefined) throw new Error("Missing function fnIdx");
         this.genFunction(fnIdx, expr.body, expr.params.length);
         this.emit(Opcode.CLOSURE);
         this.emitU16(fnIdx);
@@ -222,7 +226,9 @@ export class Codegen {
         this.emit(Opcode.POP_HANDLER);
 
         if (expr.handler.returnClause) {
-          const retFnIdx = this.result.fnIdxMap.get(expr.handler.returnClause)!;
+          const retFnIdx = this.result.fnIdxMap.get(expr.handler.returnClause);
+          if (retFnIdx === undefined)
+            throw new Error("Missing returnClause fnIdx");
           this.genFunction(retFnIdx, expr.handler.returnClause.body, 1);
           handler.returnFnIndex = retFnIdx;
           this.emit(Opcode.CLOSURE);
@@ -233,8 +239,10 @@ export class Codegen {
         }
 
         this.patchLabel(hDoneLabel);
-        this.patchU32(donePatchPos, hDoneLabel.pos!);
-        handler.donePc = hDoneLabel.pos!;
+        if (hDoneLabel.pos === null)
+          throw new Error("Missing handler done label pos");
+        this.patchU32(donePatchPos, hDoneLabel.pos);
+        handler.donePc = hDoneLabel.pos;
         this.emit(Opcode.HANDLE_DONE);
 
         this.emit(Opcode.JMP);
@@ -243,7 +251,8 @@ export class Codegen {
 
         // Clauses (evaluated outside the handler)
         for (const clause of expr.handler.opClauses) {
-          const cFnIdx = this.result.fnIdxMap.get(clause)!;
+          const cFnIdx = this.result.fnIdxMap.get(clause);
+          if (cFnIdx === undefined) throw new Error("Missing clause fnIdx");
           this.genFunction(cFnIdx, clause.body, clause.params.length + 1);
           handler.clauses.push({
             effectNameConst: this.addConst(clause.opName.lexeme),
@@ -306,7 +315,7 @@ export class Codegen {
     );
   }
   private peekCode() {
-    return this.currentCode[this.currentCode.length - 1];
+    return this.currentCode.at(-1);
   }
   private emitJump() {
     this.emit(Opcode.JMP);

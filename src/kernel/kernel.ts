@@ -1,14 +1,14 @@
-import { Task, TaskState } from "./task";
+import { type Task, TaskState } from "./task";
 import { VM } from "../vm/vm";
-import { TBCFile } from "../lang/codegen";
-import { VMStatus, VMResult } from "../vm/status";
+import { type TBCFile } from "../lang/codegen";
+import { VMStatus, type VMResult } from "../vm/status";
 import { SyscallType } from "../bytecode/opcode";
 import { Fiber } from "../vm/fiber";
 import { TBCDecoder } from "../bytecode/bin";
 import { Env } from "../vm/env";
-import { TraceManager, TraceFile } from "../trace/trace";
+import { TraceManager, type TraceFile } from "../trace/trace";
 import { StateSerializer } from "../trace/snapshot";
-import { Value } from "../vm/value"; // Added this import for Value type
+import { type Value } from "../vm/value"; // Added this import for Value type
 
 export enum KernelMode {
   NORMAL,
@@ -59,8 +59,9 @@ export class Kernel {
 
   spawnEntry(fnIdx: number, priority: number = 100): number {
     const fiber = new Fiber();
-    const entryFn = this.tbc.functions[fnIdx];
-    if (!entryFn) throw new Error(`Invalid entry function index ${fnIdx} `);
+    const entryFn = this.tbc.functions.at(fnIdx);
+    if (!entryFn)
+      throw new Error(`Invalid entry function index ${String(fnIdx)}`);
     const env = new Env(undefined, entryFn.locals);
     fiber.callStack.push({
       fnIndex: fnIdx,
@@ -114,9 +115,13 @@ export class Kernel {
       case VMStatus.SAFEPOINT:
         task.state = TaskState.READY;
         break;
-      case VMStatus.SYSCALL:
-        this.handleSyscall(task, vm, res.sysno!);
+      case VMStatus.SYSCALL: {
+        if (res.sysno === undefined) {
+          throw new Error("SYSCALL result missing sysno");
+        }
+        this.handleSyscall(task, vm, res.sysno);
         break;
+      }
       default:
         task.state = TaskState.DONE; // Default to done for unhandled statuses
         break;
@@ -124,6 +129,13 @@ export class Kernel {
   }
 
   private handleSyscall(task: Task, vm: VM, sysno: number): void {
+    if (!(sysno in SyscallType)) {
+      vm.push(null);
+      task.state = TaskState.READY;
+      return;
+    }
+
+    const syscall = sysno as SyscallType;
     let result: Value | null = null; // Refined type to allow null
 
     if (this.mode === KernelMode.REPLAY) {
@@ -132,12 +144,12 @@ export class Kernel {
         "syscall",
         task.id,
       );
-      if (ev && ev.no === sysno) {
+      if (ev?.no === sysno) {
         result = ev.res as Value; // Assert type for replay result
       }
     }
 
-    switch (sysno) {
+    switch (syscall) {
       case SyscallType.SYS_PRINT: {
         const val = vm.pop();
         if (this.mode !== KernelMode.REPLAY) {
@@ -203,7 +215,7 @@ export class Kernel {
         const hash = StateSerializer.hashState(data);
         if (hash !== snap.state_hash) {
           throw new Error(
-            `Replay mismatch at cycle ${this.totalCycles}. Expected ${snap.state_hash}, got ${hash} `,
+            `Replay mismatch at cycle ${this.totalCycles.toString()}. Expected ${snap.state_hash}, got ${hash}`,
           );
         }
       }
@@ -211,9 +223,16 @@ export class Kernel {
   }
 
   private stringify(v: Value | null): string {
-    // Refined type to allow null
     if (v === null) return "null";
-    return String(v);
+    if (typeof v === "number" || typeof v === "boolean") return String(v);
+    if (typeof v === "string") return v;
+
+    switch (v.tag) {
+      case "Closure":
+        return `Closure(fn=${String(v.fnIndex)})`;
+      case "Cont":
+        return `Cont(used=${String(v.used)})`;
+    }
   }
 
   private hasIncompleteTasks(): boolean {

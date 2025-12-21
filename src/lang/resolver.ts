@@ -1,15 +1,15 @@
 import {
-  Program,
-  Stmt,
-  Expr,
-  LetStmt,
-  BlockExpr,
-  VarExpr,
-  FunExpr,
-  ReturnClause,
-  OpClause,
+  type Program,
+  type Stmt,
+  type Expr,
+  type LetStmt,
+  type BlockExpr,
+  type VarExpr,
+  type FunExpr,
+  type ReturnClause,
+  type OpClause,
 } from "./ast";
-import { Token } from "./token";
+import { type Token } from "./token";
 
 export interface Resolution {
   depth: number;
@@ -137,9 +137,11 @@ export class Resolver {
     let depth = 0;
     for (let i = this.scopes.length - 1; i >= 0; i--) {
       if (this.scopes[i].has(expr.name.lexeme)) {
+        const slot = this.scopes[i].get(expr.name.lexeme);
+        if (slot === undefined) throw new Error("Scope slot missing");
         this.resolutions.set(expr, {
           depth,
-          slot: this.scopes[i].get(expr.name.lexeme)!,
+          slot,
         });
         return;
       }
@@ -148,7 +150,7 @@ export class Resolver {
       }
     }
     throw new Error(
-      `Undefined variable '${expr.name.lexeme}' at line ${expr.name.line}`,
+      `Undefined variable '${expr.name.lexeme}' at line ${String(expr.name.line)}`,
     );
   }
 

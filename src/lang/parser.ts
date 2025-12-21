@@ -1,19 +1,19 @@
-import { Token, TokenType } from "./token";
+import { type Token, TokenType } from "./token";
 import {
-  Program,
-  Stmt,
-  Expr,
-  LetStmt,
-  ExprStmt,
-  CallExpr,
-  FunExpr,
-  IfExpr,
-  WhileExpr,
-  BlockExpr,
-  PerformExpr,
-  HandleExpr,
-  ReturnClause,
-  OpClause,
+  type Program,
+  type Stmt,
+  type Expr,
+  type LetStmt,
+  type ExprStmt,
+  type CallExpr,
+  type FunExpr,
+  type IfExpr,
+  type WhileExpr,
+  type BlockExpr,
+  type PerformExpr,
+  type HandleExpr,
+  type ReturnClause,
+  type OpClause,
 } from "./ast";
 
 export class Parser {
@@ -100,7 +100,7 @@ export class Parser {
   private call(): Expr {
     let expr = this.primary();
 
-    while (true) {
+    for (;;) {
       if (this.match(TokenType.LEFT_PAREN)) {
         expr = this.finishCall(expr);
       } else {
@@ -151,7 +151,7 @@ export class Parser {
     if (this.match(TokenType.HANDLE)) return this.handleExpr();
 
     throw new Error(
-      `Expect expression at line ${this.peek().line}, found ${this.peek().type} ('${this.peek().lexeme}')`,
+      `Expect expression at line ${String(this.peek().line)}, found ${this.peek().type} ('${this.peek().lexeme}')`,
     );
   }
 
@@ -294,7 +294,12 @@ export class Parser {
             "Handler clause must have at least a continuation parameter.",
           );
         }
-        const kName = params.pop()!;
+        const kName = params.pop();
+        if (!kName) {
+          throw new Error(
+            "Handler clause must have at least a continuation parameter.",
+          );
+        }
 
         this.consume(TokenType.ARROW, "Expect '=>' before clause body.");
         const bodyExpr = this.expression();
@@ -321,7 +326,7 @@ export class Parser {
     if (this.check(type)) return this.advance();
     const found = this.peek().type;
     throw new Error(
-      `${message} Found ${found} ('${this.peek().lexeme}') at line ${this.peek().line}`,
+      `${message} Found ${found} ('${this.peek().lexeme}') at line ${String(this.peek().line)}`,
     );
   }
 

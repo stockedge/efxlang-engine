@@ -1,11 +1,19 @@
-import { TBCFile, TBCFunction, TBCHandler } from "../lang/codegen";
-import { Value } from "../vm/value";
+import {
+  type TBCFile,
+  type TBCFunction,
+  type TBCHandler,
+} from "../lang/codegen";
+import { type Value } from "../vm/value";
 
 export enum ConstType {
   NULL = 0,
   BOOL = 1,
   NUM = 2,
   STR = 3,
+}
+
+function isConstType(v: number): v is ConstType {
+  return v in ConstType;
 }
 
 export interface LiteralExpr {
@@ -23,7 +31,7 @@ export interface TraceEvent {
   cycle: string; // bigint as string
   type: "input" | "syscall" | "safepoint";
   task: number;
-  [key: string]: string | number | boolean | null | undefined | unknown;
+  [key: string]: unknown;
 }
 
 class ByteWriter {
@@ -224,7 +232,11 @@ export class TBCDecoder {
     const constCount = this.reader.readU16();
     const consts: Value[] = [];
     for (let _i = 0; _i < constCount; _i++) {
-      const type = this.reader.readU8();
+      const rawType = this.reader.readU8();
+      if (!isConstType(rawType)) {
+        throw new Error(`Unknown const type ${String(rawType)}`);
+      }
+      const type = rawType;
       switch (type) {
         case ConstType.NULL:
           consts.push(null);
@@ -239,7 +251,7 @@ export class TBCDecoder {
           consts.push(this.reader.readString());
           break;
         default:
-          throw new Error(`Unknown const type ${type}`);
+          throw new Error(`Unknown const type ${String(type)}`);
       }
     }
 

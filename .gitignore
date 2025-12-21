@@ -10,6 +10,7 @@ build/
 # Logs
 *.log
 vm_log.txt
+test_output_*.txt
 
 # Environment
 .env

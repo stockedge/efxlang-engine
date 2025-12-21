@@ -1,4 +1,4 @@
-import { Value } from "./value";
+import { type Value } from "./value";
 
 export class Env {
   public slots: Value[];
@@ -8,8 +8,8 @@ export class Env {
     public parent?: Env,
     size: number = 0,
   ) {
-    this.slots = new Array(size).fill(null);
-    this.written = new Array(size).fill(false);
+    this.slots = new Array<Value>(size).fill(null);
+    this.written = new Array<boolean>(size).fill(false);
   }
 
   get(depth: number, slot: number): Value {

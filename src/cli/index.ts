@@ -4,7 +4,8 @@ import { Parser } from "../lang/parser";
 import { Resolver } from "../lang/resolver";
 import { Codegen } from "../lang/codegen";
 import { TBCEncoder } from "../bytecode/bin";
-import { Kernel, ImageFormat } from "../kernel/kernel";
+import { Kernel, type ImageFormat } from "../kernel/kernel";
+import { parseTraceFile } from "../trace/trace";
 
 function main() {
   const args = process.argv.slice(2);
@@ -55,7 +56,9 @@ function main() {
     }
     case "replay": {
       const traceFile = args[1];
-      const trace = JSON.parse(readFileSync(traceFile, "utf8"));
+      const trace = parseTraceFile(
+        JSON.parse(readFileSync(traceFile, "utf8")) as unknown,
+      );
 
       // Replay needs the TBC. Usually it's in image.
       // My Trace structure currently has 'image_hash'.

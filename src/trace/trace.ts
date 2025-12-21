@@ -2,7 +2,7 @@ export interface TraceEvent {
   cycle: string; // bigint as string
   type: "input" | "syscall" | "safepoint";
   task: number;
-  [key: string]: string | number | boolean | null | undefined | unknown;
+  [key: string]: unknown;
 }
 
 export interface TraceSnapshot {
@@ -15,6 +15,49 @@ export interface TraceFile {
   image_hash: string;
   events: TraceEvent[];
   snapshots: TraceSnapshot[];
+}
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null;
+}
+
+function isTraceEventType(v: unknown): v is TraceEvent["type"] {
+  return v === "input" || v === "syscall" || v === "safepoint";
+}
+
+export function parseTraceFile(v: unknown): TraceFile {
+  if (!isRecord(v)) throw new Error("TraceFile must be an object");
+
+  const imageHash = v.image_hash;
+  if (typeof imageHash !== "string") throw new Error("TraceFile.image_hash");
+
+  const events = v.events;
+  if (!Array.isArray(events)) throw new Error("TraceFile.events");
+
+  const snapshots = v.snapshots;
+  if (!Array.isArray(snapshots)) throw new Error("TraceFile.snapshots");
+
+  return {
+    image_hash: imageHash,
+    events: events.map((e) => {
+      if (!isRecord(e)) throw new Error("TraceEvent must be an object");
+      if (typeof e.cycle !== "string") throw new Error("TraceEvent.cycle");
+      if (!isTraceEventType(e.type)) throw new Error("TraceEvent.type");
+      if (typeof e.task !== "number") throw new Error("TraceEvent.task");
+      return e as TraceEvent;
+    }),
+    snapshots: snapshots.map((s) => {
+      if (!isRecord(s)) throw new Error("TraceSnapshot must be an object");
+      if (typeof s.cycle !== "string") throw new Error("TraceSnapshot.cycle");
+      if (typeof s.state_hash !== "string")
+        throw new Error("TraceSnapshot.state_hash");
+      return {
+        cycle: s.cycle,
+        state_hash: s.state_hash,
+        data: (s as { data?: unknown }).data,
+      };
+    }),
+  };
 }
 
 export class TraceManager {

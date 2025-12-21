@@ -1,7 +1,7 @@
 import { Lexer } from "../src/lang/lexer";
 import { Parser } from "../src/lang/parser";
 import { Resolver } from "../src/lang/resolver";
-import { LetStmt, FunExpr, VarExpr } from "../src/lang/ast";
+import { type LetStmt, type FunExpr, type VarExpr } from "../src/lang/ast";
 import * as assert from "assert";
 
 function testResolver() {

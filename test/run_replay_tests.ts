@@ -41,7 +41,7 @@ function testRecordReplay() {
   const trace = kernelRec.getTrace();
   assert.ok(trace);
   assert.ok(trace.events.length > 0);
-  console.log(`  ✓ Recorded ${trace.events.length} events`);
+  console.log(`  ✓ Recorded ${String(trace.events.length)} events`);
 
   // 2. Replay
   const kernelRep = new Kernel(tbc);

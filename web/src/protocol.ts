@@ -270,7 +270,15 @@ export type UiEventMessage = MsgBase & {
 
 export type WorkerMessage = RespOk | RespErr | UiEventMessage | RespCompileOk;
 
-export function isCommandMessage(v: unknown): v is CommandMessage {
+export type UnknownCommandMessage = {
+  type: "command";
+  version?: unknown;
+  requestId?: unknown;
+  command?: unknown;
+  payload?: unknown;
+};
+
+export function isCommandMessage(v: unknown): v is UnknownCommandMessage {
   return (
     typeof v === "object" &&
     v !== null &&

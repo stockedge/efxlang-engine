@@ -114,7 +114,7 @@ function maybeRecordEvent(ev: DeosUiEvent) {
   if (ev.type === "console") activeTrace.output.push(ev);
 
   if (ev.type === "tick") {
-    if (lastSnapshotTick === null) lastSnapshotTick = ev.tick;
+    lastSnapshotTick ??= ev.tick;
     if (ev.tick - lastSnapshotTick >= activeTrace.config.snapshotEveryTicks) {
       takeSnapshotForTrace();
     }
@@ -396,11 +396,15 @@ async function handleCommand(
     }
     case "loadTrace": {
       try {
-        const parsed = JSON.parse(msg.payload.traceJsonText) as DeosTraceV1;
-        if (!parsed || parsed.version !== "1.0") {
+        const parsed = JSON.parse(msg.payload.traceJsonText) as unknown;
+        if (
+          typeof parsed !== "object" ||
+          parsed === null ||
+          (parsed as { version?: unknown }).version !== "1.0"
+        ) {
           return respErr(requestId, "BadTrace", "unsupported trace version");
         }
-        loadedTrace = parsed;
+        loadedTrace = parsed as DeosTraceV1;
         return respOk(requestId);
       } catch (e) {
         return respErr(requestId, "BadTrace", "trace JSON parse failed", e);
@@ -436,7 +440,7 @@ async function handleCommand(
 
         engine.replayStart();
 
-        const snap = trace.snapshots[0];
+        const snap = trace.snapshots.at(0);
         if (snap) engine.loadSnapshotJson(snap.snapshotJson);
 
         const snapCycle = snap ? BigInt(snap.cycle) : 0n;
@@ -467,7 +471,7 @@ async function handleCommand(
         const snaps = trace.snapshots
           .filter((s) => s.tick <= targetTick)
           .sort((a, b) => b.tick - a.tick);
-        const snap = snaps[0] ?? trace.snapshots[0] ?? null;
+        const snap = snaps.at(0) ?? trace.snapshots.at(0) ?? null;
         if (!snap)
           return respErr(requestId, "NoSnapshot", "no snapshot available");
 
@@ -544,6 +548,6 @@ self.onmessage = async (ev: MessageEvent<unknown>) => {
     return;
   }
 
-  const res = await handleCommand(msg);
+  const res = await handleCommand(msg as unknown as CommandMessage);
   self.postMessage(res);
 };

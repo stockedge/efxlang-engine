@@ -1,4 +1,4 @@
-import { Token, TokenType } from "./token";
+import { type Token, TokenType } from "./token";
 
 export class Lexer {
   private tokens: Token[] = [];
@@ -6,7 +6,7 @@ export class Lexer {
   private current = 0;
   private line = 1;
 
-  private static readonly keywords: { [key: string]: TokenType } = {
+  private static readonly keywords: Partial<Record<string, TokenType>> = {
     let: TokenType.LET,
     fun: TokenType.FUN,
     if: TokenType.IF,
@@ -125,7 +125,7 @@ export class Lexer {
         } else {
           // Keep it simple, just skip or throw
           console.error(
-            `Error: Unexpected character ${c} at line ${this.line}`,
+            `Error: Unexpected character ${c} at line ${String(this.line)}`,
           );
         }
         break;
@@ -138,10 +138,7 @@ export class Lexer {
     }
 
     const text = this.source.substring(this.start, this.current);
-    let type = Lexer.keywords[text];
-    if (type === undefined) {
-      type = TokenType.IDENTIFIER;
-    }
+    const type = Lexer.keywords[text] ?? TokenType.IDENTIFIER;
     this.addToken(type);
   }
 
@@ -197,7 +194,7 @@ export class Lexer {
     }
 
     if (this.isAtEnd()) {
-      console.error(`Error: Unterminated string at line ${this.line}`);
+      console.error(`Error: Unterminated string at line ${String(this.line)}`);
       return;
     }
 

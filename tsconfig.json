@@ -10,6 +10,12 @@
     "rootDir": "./",
     "types": ["node", "vitest/globals"]
   },
-  "include": ["src/**/*", "test/**/*", "vite.browser.config.ts"],
+  "include": [
+    "src/**/*",
+    "test/**/*",
+    "e2e/**/*",
+    "vite.browser.config.ts",
+    "playwright.config.ts"
+  ],
   "exclude": ["node_modules"]
 }

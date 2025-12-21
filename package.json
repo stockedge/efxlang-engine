@@ -4,6 +4,8 @@
   "main": "index.js",
   "scripts": {
     "test": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
     "deos": "ts-node --transpile-only src/cli/index.ts",
     "build:wasm": "asc wasm/deos_engine_shim.ts -o web/public/deos_engine.wasm -t web/public/deos_engine.wat --runtime stub --optimize --noAssert",
     "dev:browser": "npm run build:wasm && vite --config vite.browser.config.ts",
@@ -29,6 +31,7 @@
   "license": "ISC",
   "description": "",
   "devDependencies": {
+    "@playwright/test": "^1.57.0",
     "@rollup/rollup-win32-x64-msvc": "^4.54.0",
     "@types/node": "^25.0.3",
     "assemblyscript": "^0.28.8",

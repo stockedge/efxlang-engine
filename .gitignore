@@ -14,6 +14,10 @@ web/public/*.wat
 vm_log.txt
 test_output_*.txt
 
+# Playwright
+playwright-report/
+test-results/
+
 # Environment
 .env
 .env.*

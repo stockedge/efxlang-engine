@@ -53,7 +53,13 @@ export default tseslint.config(
   prettierConfig,
 
   {
-    files: ["src/**/*.ts", "test/**/*.ts", "vite.browser.config.ts"],
+    files: [
+      "src/**/*.ts",
+      "test/**/*.ts",
+      "e2e/**/*.ts",
+      "vite.browser.config.ts",
+      "playwright.config.ts",
+    ],
     plugins: strongPlugins,
     languageOptions: {
       parserOptions: {

@@ -6,7 +6,9 @@
 - `web/`: Vite-powered browser UI. UI code is in `web/src/`, static assets in `web/public/`.
 - `wasm/`: AssemblyScript shim (`deos_engine_shim.ts`) compiled to `web/public/deos_engine.wasm` and `.wat`.
 - `test/`: Unit tests and custom runners (see Testing Guidelines).
+- `e2e/`: Playwright end-to-end tests.
 - `dist-web/`: Generated browser build output (do not edit by hand).
+- `test-results/`: Playwright output artifacts (generated).
 - Specs and examples: `product_spec.md`, `ui_spec.md`, `spec.md`, plus sample inputs like `hello.efx`.
 
 ## Build, Test, and Development Commands
@@ -18,6 +20,7 @@
 - `npm run preview:browser`: Preview the production build locally.
 - `npm run deos`: Run the CLI (`src/cli/index.ts`).
 - `npm test`: Run Vitest unit tests.
+- `npm run test:e2e` / `npm run test:e2e:headed`: Run Playwright E2E tests.
 - `npm run lint` / `npm run format`: Lint with ESLint and format with Prettier.
 - `npm run type-check` / `npm run type-check:browser`: Type-check TS sources (root and `web/`).
 
@@ -30,6 +33,7 @@
 ## Testing Guidelines
 
 - Primary unit tests run via `npm test` (Vitest).
+- E2E tests run via Playwright: `npm run test:e2e` (headless) or `npm run test:e2e:headed`.
 - Targeted suites can be run with ts-node, e.g. `npx ts-node --transpile-only test/run_integration_tests.ts` or other `run_*_tests.ts` files in `test/`.
 
 ## Commit & Pull Request Guidelines
